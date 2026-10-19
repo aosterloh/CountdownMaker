@@ -97,8 +97,8 @@ graph LR
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/aosterloh/magic-countdown-generator.git
-   cd magic-countdown-generator
+   git clone https://github.com/aosterloh/CountdownMaker.git
+   cd CountdownMaker
    ```
 
 2. **Install dependencies**:
