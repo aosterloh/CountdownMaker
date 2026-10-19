@@ -199,6 +199,7 @@ export const SingleClipFixer: React.FC<SingleClipFixerProps> = ({
                   muted
                   playsInline
                   controls
+                  controlsList="nodownload"
                   className="w-full h-full object-contain"
                 />
               ) : (

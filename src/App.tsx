@@ -24,20 +24,23 @@ import { SlotCard } from './components/SlotCard';
 import { WaveformTimeline } from './components/WaveformTimeline';
 import { SimplifiedAudioPreview } from './components/SimplifiedAudioPreview';
 import { RefineModal } from './components/RefineModal';
-import { MasterExportModal } from './components/MasterExportModal';
+import { FinalCutExportStudio } from './components/FinalCutExportStudio';
 import { BulkVideoProgressPanel } from './components/BulkVideoProgressPanel';
 import { SingleClipFixer } from './components/SingleClipFixer';
-import { PasswordGate } from './components/PasswordGate';
+import { GoogleAuthGate } from './components/GoogleAuthGate';
 import { PromptGuideModal } from './components/PromptGuideModal';
 import { RecentMastersCarousel } from './components/RecentMastersCarousel';
 import { WelcomeGuideModal } from './components/WelcomeGuideModal';
 import { StepGuideModal, StepGuideId } from './components/StepGuideModal';
-import { CountdownSlot, ImageModelType, VeoModelType, AuthMode, SlotTemporalConfig, VideoQualityMode, UpscaleEngineType, JobSummary, VeoQueueStatus, GroundingMetadata } from './types';
+import { CountdownSlot, ImageModelType, VeoModelType, AuthMode, SlotTemporalConfig, VideoQualityMode, UpscaleEngineType, JobSummary, VeoQueueStatus, GroundingMetadata, RenderMetrics } from './types';
 import { UNIVERSAL_STYLE_ANCHOR } from './utils/promptBuilder';
 import { calculateTimelineOffsets, getDefaultTemporalConfigForSlot } from './utils/temporalMath';
 import { playPromptChime, playStepSuccessChime, playGrandFinaleChime, setSoundEnabled as setAudioSoundEnabled } from './utils/audioChimes';
 import { startTitlePulsing, sendDesktopNotification, requestNotificationPermission } from './utils/browserNotifications';
 import { getMediaUrl } from './utils/media';
+import { extractTimestampFromUri, getLatestSlotVideoTimestamp } from './utils/videoTimeline';
+import { ExpressDirectorView } from './components/ExpressDirectorView';
+import { requestYouTubeAccessToken, getCachedYouTubeToken } from './utils/youtubeAuth';
 
 const API_BASE = window.location.port === '5173' ? 'http://localhost:3001' : '';
 
@@ -87,9 +90,9 @@ export const App: React.FC = () => {
     return localStorage.getItem('gemini_api_key') || '';
   });
   const [authMode, setAuthMode] = useState<AuthMode>('ADC');
-  const [selectedModel, setSelectedModel] = useState<ImageModelType>('gemini-3.1-flash-image');
-  const [selectedVeoModel, setSelectedVeoModel] = useState<VeoModelType>('veo-3.1-fast-generate-preview');
-  const [selectedVideoQuality, setSelectedVideoQuality] = useState<VideoQualityMode>('FAST_720P');
+  const [selectedModel, setSelectedModel] = useState<ImageModelType>('gemini-nano-banana-2.1');
+  const [selectedVeoModel, setSelectedVeoModel] = useState<VeoModelType>('veo-3.1-generate-preview');
+  const [selectedVideoQuality, setSelectedVideoQuality] = useState<VideoQualityMode>('FULL_4K');
 
   // Welcome Guide Onboarding Modal State (Explains the 3 simple steps on Google Blue background)
   const [showWelcomeGuide, setShowWelcomeGuide] = useState<boolean>(() => {
@@ -220,6 +223,45 @@ export const App: React.FC = () => {
   const [companyUrl, setCompanyUrl] = useState<string>('');
   const [themeContext, setThemeContext] = useState<string>('');
   const [styleModifiers, setStyleModifiers] = useState<string>('');
+
+
+  // Director Mode: 'express' (1-click autonomous autopilot) vs 'expert' (deep granular control)
+  const [directorMode, setDirectorMode] = useState<'express' | 'expert'>(() => {
+    try {
+      const saved = localStorage.getItem('countdown_director_mode');
+      if (saved === 'expert' || saved === 'express') return saved;
+    } catch {}
+    return 'express';
+  });
+
+  const handleDirectorModeChange = (mode: 'express' | 'expert') => {
+    setDirectorMode(mode);
+    try {
+      localStorage.setItem('countdown_director_mode', mode);
+    } catch {}
+  };
+
+  // YouTube Unlisted Auto-Upload State
+  const [autoUploadYouTube, setAutoUploadYouTube] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('countdown_auto_upload_youtube') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleAutoUploadYouTubeChange = (val: boolean) => {
+    setAutoUploadYouTube(val);
+    try {
+      localStorage.setItem('countdown_auto_upload_youtube', String(val));
+    } catch {}
+  };
+
+  const [youtubeUrl, setYoutubeUrl] = useState<string | null>(null);
+  const [isUploadingYouTube, setIsUploadingYouTube] = useState<boolean>(false);
+  const [youtubeUploadError, setYoutubeUploadError] = useState<string | null>(null);
+  const isAutopilotRunningRef = useRef<boolean>(false);
+
   const [creatorLdap, setCreatorLdap] = useState<string>(() => {
     try {
       const saved = localStorage.getItem('auth_user');
@@ -236,6 +278,21 @@ export const App: React.FC = () => {
     } catch {}
     return '';
   });
+
+  // Feature Selectors & Deliverables State (Customer Meeting Package)
+  const [includeCinemaWallpaper, setIncludeCinemaWallpaper] = useState<boolean>(true);
+  const [includeBugdroidMascot, setIncludeBugdroidMascot] = useState<boolean>(true);
+  const [includeCountdownVideo, setIncludeCountdownVideo] = useState<boolean>(true);
+
+  const [cinemaWallpaperUri, setCinemaWallpaperUri] = useState<string | null>(null);
+  const [bugdroidMascotUri, setBugdroidMascotUri] = useState<string | null>(null);
+  const [isGeneratingWallpaper, setIsGeneratingWallpaper] = useState<boolean>(false);
+  const [isGeneratingBugdroid, setIsGeneratingBugdroid] = useState<boolean>(false);
+  const [wallpaperError, setWallpaperError] = useState<string | null>(null);
+  const [bugdroidError, setBugdroidError] = useState<string | null>(null);
+  const [customerIndustry, setCustomerIndustry] = useState<string>('');
+  const [wallpaperPrompt, setWallpaperPrompt] = useState<string>('');
+  const [bugdroidPrompt, setBugdroidPrompt] = useState<string>('');
 
   function createInitialSlots(): CountdownSlot[] {
     return Array.from({ length: 10 }, (_, i) => {
@@ -270,6 +327,10 @@ export const App: React.FC = () => {
 
   // Countdown Slots (10 down to 1)
   const [slots, setSlots] = useState<CountdownSlot[]>(createInitialSlots);
+  const currentJobIdRef = useRef<string | null>(currentJobId);
+  currentJobIdRef.current = currentJobId;
+  const slotsRef = useRef<CountdownSlot[]>(slots);
+  slotsRef.current = slots;
 
   // Global Loading States
   const [isGeneratingPrompts, setIsGeneratingPrompts] = useState(false);
@@ -280,7 +341,6 @@ export const App: React.FC = () => {
   // Modal States
   const [activeRefineSlot, setActiveRefineSlot] = useState<CountdownSlot | null>(null);
   const [previewVideoUri, setPreviewVideoUri] = useState<string | null>(null);
-  const [showExportModal, setShowExportModal] = useState(false);
   const [isExportingMaster, setIsExportingMaster] = useState(false);
   const [masterVideoUri, setMasterVideoUri] = useState<string | null>(null);
   const [master720pUri, setMaster720pUri] = useState<string | null>(null);
@@ -289,14 +349,8 @@ export const App: React.FC = () => {
   const [extended720pUri, setExtended720pUri] = useState<string | null>(null);
   const [extended4kUri, setExtended4kUri] = useState<string | null>(null);
   const [isExportingExtendedMaster, setIsExportingExtendedMaster] = useState(false);
-  const [exportModalInitialTab, setExportModalInitialTab] = useState<'30s' | 'extended'>('30s');
   const [exportError, setExportError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (showExportModal) {
-      triggerStepGuideIfUnseen('step-6');
-    }
-  }, [showExportModal]);
+  const [projectRenderMetrics, setProjectRenderMetrics] = useState<RenderMetrics | undefined>(undefined);
 
   // Veo 3 Queue Status State (tracks server-side 2 parallel workers and waiting queue)
   const [veoQueueStatus, setVeoQueueStatus] = useState<VeoQueueStatus>({
@@ -309,7 +363,7 @@ export const App: React.FC = () => {
 
   // Google Search Grounding Metadata State
   const [groundingMetadata, setGroundingMetadata] = useState<GroundingMetadata | null>(null);
-  const [geminiModelUsed, setGeminiModelUsed] = useState<string>('gemini-3.8-flash');
+  const [geminiModelUsed, setGeminiModelUsed] = useState<string>('gemini-4-argon');
 
   const pollVeoQueueStatus = async () => {
     try {
@@ -367,7 +421,7 @@ export const App: React.FC = () => {
         const j = data.job;
         setCurrentJobId(j.jobId);
         setBrandName(j.customerName || '');
-        if ((j as any).companyUrl) setCompanyUrl((j as any).companyUrl);
+        setCompanyUrl((j as any).companyUrl || '');
         setThemeContext(j.creativeTheme || '');
         if (j.creatorLdap) setCreatorLdap(j.creatorLdap);
         if (j.styleModifiers !== undefined) setStyleModifiers(j.styleModifiers);
@@ -381,6 +435,7 @@ export const App: React.FC = () => {
         setExtendedMasterVideoUri(j.extendedMasterVideoUri || null);
         setExtended720pUri(j.extended720pUri || null);
         setExtended4kUri(j.extended4kUri || null);
+        setProjectRenderMetrics(j.renderMetrics);
         if (j.groundingMetadata) setGroundingMetadata(j.groundingMetadata);
         if (j.geminiModelUsed) setGeminiModelUsed(j.geminiModelUsed);
 
@@ -456,6 +511,16 @@ export const App: React.FC = () => {
         setExtendedMasterVideoUri(null);
         setExtended720pUri(null);
         setExtended4kUri(null);
+        setCinemaWallpaperUri(null);
+        setBugdroidMascotUri(null);
+        setIsGeneratingWallpaper(false);
+        setIsGeneratingBugdroid(false);
+        setWallpaperError(null);
+        setBugdroidError(null);
+        setCustomerIndustry('');
+        setWallpaperPrompt('');
+        setBugdroidPrompt('');
+        setProjectRenderMetrics(undefined);
         setGlobalError(null);
 
         // Update URL query parameter
@@ -506,6 +571,7 @@ export const App: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             customerName: brandName,
+            companyUrl: companyUrl || undefined,
             creatorLdap,
             creativeTheme: themeContext,
             styleModifiers,
@@ -514,7 +580,12 @@ export const App: React.FC = () => {
             currentStage,
             slots,
             masterVideoUri,
+            master720pUri,
+            master4kUri,
             extendedMasterVideoUri,
+            extended720pUri,
+            extended4kUri,
+            renderMetrics: projectRenderMetrics || null,
             groundingMetadata,
             geminiModelUsed,
           }),
@@ -533,7 +604,7 @@ export const App: React.FC = () => {
                     currentStage,
                     readyImagesCount: slots.filter((s) => Boolean(s.currentImageUri)).length,
                     readyVideosCount: slots.filter((s) => Boolean(s.rawVideoUri)).length,
-                    hasMasterVideo: Boolean(masterVideoUri),
+                    hasMasterVideo: Boolean(masterVideoUri || master720pUri || master4kUri),
                     updatedAt: new Date().toISOString(),
                   }
                 : j
@@ -551,6 +622,7 @@ export const App: React.FC = () => {
   }, [
     currentJobId,
     brandName,
+    companyUrl,
     creatorLdap,
     themeContext,
     styleModifiers,
@@ -559,7 +631,12 @@ export const App: React.FC = () => {
     currentStage,
     slots,
     masterVideoUri,
+    master720pUri,
+    master4kUri,
     extendedMasterVideoUri,
+    extended720pUri,
+    extended4kUri,
+    projectRenderMetrics,
   ]);
 
   const handleSelectJob = (jobId: string) => {
@@ -753,6 +830,15 @@ export const App: React.FC = () => {
     });
     setSlots(freshSlots);
 
+    // Invalidate all previous master cut exports and benchmarks immediately upon prompt regeneration
+    setMasterVideoUri(null);
+    setMaster720pUri(null);
+    setMaster4kUri(null);
+    setExtendedMasterVideoUri(null);
+    setExtended720pUri(null);
+    setExtended4kUri(null);
+    setProjectRenderMetrics(undefined);
+
     // Ensure Job ID matches the customer brand name so URL query param is accurate
     const sanitizedBrand = (brand || '').trim().replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'Project';
     if (!currentJobId || !currentJobId.startsWith(sanitizedBrand)) {
@@ -773,14 +859,41 @@ export const App: React.FC = () => {
         });
         const createData = await createRes.json();
         if (createData.success && createData.job) {
-          setCurrentJobId(createData.job.jobId);
+          const newJobId = createData.job.jobId;
+          currentJobIdRef.current = newJobId;
+          setCurrentJobId(newJobId);
           const urlObj = new URL(window.location.href);
-          urlObj.searchParams.set('job', createData.job.jobId);
+          urlObj.searchParams.set('job', newJobId);
           window.history.replaceState({}, '', urlObj.toString());
           await fetchJobsList();
         }
       } catch (e) {
         console.warn('Failed to sync job ID for brand:', e);
+      }
+    } else {
+      // Existing job for same brand: immediately flush invalidated master cut state to GCS
+      try {
+        await fetch(`${API_BASE}/api/jobs/${currentJobId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customerName: brand || 'Project',
+            companyUrl: url || companyUrl || undefined,
+            creatorLdap: ldap,
+            creativeTheme: theme,
+            currentStage: 2,
+            slots: freshSlots,
+            masterVideoUri: null,
+            master720pUri: null,
+            master4kUri: null,
+            extendedMasterVideoUri: null,
+            extended720pUri: null,
+            extended4kUri: null,
+            renderMetrics: null,
+          }),
+        });
+      } catch (e) {
+        console.warn('Failed to reset job state on GCS:', e);
       }
     }
 
@@ -827,15 +940,20 @@ export const App: React.FC = () => {
             videoPrompt: item.videoPrompt,
             isPromptApproved: true,
             isPromptRecreating: false,
+            rawVideoUri: null,
+            processedVideoUri: null,
+            videoAnalysis: undefined,
+            videoError: null,
           };
         });
 
+        slotsRef.current = updatedSlots;
         setSlots(updatedSlots);
         setCurrentStage(2); // Advance directly to Stage 2 (Bulk Video Generation)
         setActiveSequentialSlot(10);
         playPromptChime();
-        // Immediately trigger bulk video generation with Veo 3.1 Fast (2 Parallel Workers)
-        handleGenerateAllVideos(selectedVideoQuality, updatedSlots);
+        // Immediately trigger bulk video generation with Veo 3.1 Fast (2 Parallel Workers) with forceAll = true
+        handleGenerateAllVideos(selectedVideoQuality, updatedSlots, true);
       } else {
         setGlobalError(data.error || 'Failed to synthesize prompts for all 10 scenes');
       }
@@ -890,12 +1008,21 @@ export const App: React.FC = () => {
   };
 
   const handleUpdateVideoPrompt = (slotIndex: number, newVideoPrompt: string) => {
+    setMasterVideoUri(null);
+    setMaster720pUri(null);
+    setMaster4kUri(null);
+    setExtendedMasterVideoUri(null);
+    setExtended720pUri(null);
+    setExtended4kUri(null);
+    setProjectRenderMetrics(undefined);
+
     setSlots((prev) =>
       prev.map((s) =>
         s.index === slotIndex
           ? {
               ...s,
               videoPrompt: newVideoPrompt,
+              processedVideoUri: null,
             }
           : s
       )
@@ -1314,6 +1441,15 @@ export const App: React.FC = () => {
     qualityMode: VideoQualityMode = selectedVideoQuality,
     explicitPrompt?: string
   ) => {
+    // Invalidate master cuts immediately because an individual scene is being synthesized anew
+    setMasterVideoUri(null);
+    setMaster720pUri(null);
+    setMaster4kUri(null);
+    setExtendedMasterVideoUri(null);
+    setExtended720pUri(null);
+    setExtended4kUri(null);
+    setProjectRenderMetrics(undefined);
+
     const targetSlot = slots.find((s) => s.index === slotIndex);
     if (!targetSlot && !explicitPrompt) return;
 
@@ -1323,7 +1459,18 @@ export const App: React.FC = () => {
       `[0.0s-2.5s]: Dynamic wide cinematic camera tracking shot establishing ${targetSlot?.sceneConcept || themeContext || 'engineering facility'} for ${brandName || 'brand'}, focusing solely on moving machinery and ambient cinematic lighting. [2.5s-4.0s]: Camera rapidly zooms and macro-locks onto the center of ${targetSlot?.objectEmbedding || 'carrier surface'}, revealing the bold high-contrast physical numeral '${slotIndex}' laser-etched in glowing amber luminescence against a dark matte finish occupying the center of the frame in razor-sharp focus during the final second. Essential requirement: the physical numeral '${slotIndex}' must be clearly visible, centered, and unmistakably rendered in frame. Cinematography: 35mm anamorphic lens, macro depth of field, volumetric rim lighting, 8k photorealistic textures, 60fps.`;
 
     setSlots((prev) =>
-      prev.map((s) => (s.index === slotIndex ? { ...s, isVideoLoading: true, activeWorkerId: workerId, videoError: null } : s))
+      prev.map((s) =>
+        s.index === slotIndex
+          ? {
+              ...s,
+              isVideoLoading: true,
+              activeWorkerId: workerId,
+              videoError: null,
+              processedVideoUri: null,
+              videoAnalysis: undefined,
+            }
+          : s
+      )
     );
 
     setActiveVideoSlots((prev) => [
@@ -1342,20 +1489,39 @@ export const App: React.FC = () => {
           veoModel: selectedVeoModel,
           apiKey,
           authMode,
-          jobId: currentJobId,
+          jobId: currentJobIdRef.current || currentJobId,
         }),
       });
       const data = await res.json();
 
       if (data.success && data.rawVideoUri) {
         playStepSuccessChime();
-        setSlots((prev) =>
-          prev.map((s) =>
+        setSlots((prev) => {
+          const next = prev.map((s) =>
             s.index === slotIndex
-              ? { ...s, rawVideoUri: data.rawVideoUri, videoQuality: qualityMode, isVideoLoading: false, activeWorkerId: null, videoError: null }
+              ? {
+                  ...s,
+                  rawVideoUri: data.rawVideoUri,
+                  processedVideoUri: null,
+                  videoQuality: qualityMode,
+                  isVideoLoading: false,
+                  activeWorkerId: null,
+                  videoError: null,
+                }
               : s
-          )
-        );
+          );
+          slotsRef.current = next;
+          return next;
+        });
+        // Ensure master cuts remain invalidated with new take
+        setMasterVideoUri(null);
+        setMaster720pUri(null);
+        setMaster4kUri(null);
+        setExtendedMasterVideoUri(null);
+        setExtended720pUri(null);
+        setExtended4kUri(null);
+        setProjectRenderMetrics(undefined);
+
         // Trigger Veo AI Video Quality Inspector in background automatically
         handleAnalyzeVideoForSlot(slotIndex, data.rawVideoUri);
       } else {
@@ -1431,31 +1597,71 @@ export const App: React.FC = () => {
 
   // 3c. 1-Click Apply AI Prompt Fix and Regenerate Video (Self-Improvement with Human in the Loop)
   const handleApplyAiPromptFixAndRegenerate = async (slotIndex: number, fixPrompt: string) => {
+    setMasterVideoUri(null);
+    setMaster720pUri(null);
+    setMaster4kUri(null);
+    setExtendedMasterVideoUri(null);
+    setExtended720pUri(null);
+    setExtended4kUri(null);
+    setProjectRenderMetrics(undefined);
+
     setSlots((prev) =>
       prev.map((s) =>
         s.index === slotIndex
-          ? { ...s, videoPrompt: fixPrompt, videoAnalysis: undefined }
+          ? {
+              ...s,
+              videoPrompt: fixPrompt,
+              videoAnalysis: undefined,
+              rawVideoUri: null,
+              processedVideoUri: null,
+            }
           : s
       )
     );
-    await handleGenerateVideoForSlot(slotIndex, 1, selectedVideoQuality);
+    await handleGenerateVideoForSlot(slotIndex, 1, selectedVideoQuality, fixPrompt);
   };
 
-  // Batch Generate remaining missing Veo 3 videos (Parallel 2-Worker Queue Dispatch)
+  // Batch Generate Veo 3 videos (Parallel 2-Worker Queue Dispatch)
   const handleGenerateAllVideos = async (
     qualityMode: VideoQualityMode = selectedVideoQuality,
-    customSlots?: CountdownSlot[]
+    customSlots?: CountdownSlot[],
+    forceAll: boolean = false
   ) => {
     setCurrentStage(2);
     requestNotificationPermission().catch(() => {});
     setIsBatchGeneratingVideos(true);
     setSelectedVideoQuality(qualityMode);
 
-    // Only target slots that do NOT already have a generated video and are not currently loading
-    const slotsToUse = customSlots || slots;
-    const missingSlots = [...slotsToUse].filter(
-      (s) => !s.rawVideoUri && !s.processedVideoUri && !s.isVideoLoading
-    );
+    if (forceAll) {
+      setMasterVideoUri(null);
+      setMaster720pUri(null);
+      setMaster4kUri(null);
+      setExtendedMasterVideoUri(null);
+      setExtended720pUri(null);
+      setExtended4kUri(null);
+      setProjectRenderMetrics(undefined);
+    }
+
+    const baseSlots = customSlots || slots;
+    const slotsToUse = forceAll
+      ? baseSlots.map((s) => ({
+          ...s,
+          rawVideoUri: null,
+          processedVideoUri: null,
+          videoAnalysis: undefined,
+          videoError: null,
+        }))
+      : baseSlots;
+
+    if (forceAll) {
+      setSlots(slotsToUse);
+    }
+
+    const missingSlots = forceAll
+      ? [...slotsToUse]
+      : [...slotsToUse].filter(
+          (s) => !s.rawVideoUri && !s.processedVideoUri && !s.isVideoLoading
+        );
     const sorted = [...missingSlots].sort((a, b) => b.diegeticNumber - a.diegeticNumber);
 
     // Dispatch all missing slots concurrently to backend VeoQueueManager.
@@ -1465,13 +1671,27 @@ export const App: React.FC = () => {
       sorted.map((s) => handleGenerateVideoForSlot(s.index, 1, qualityMode, s.videoPrompt))
     );
 
-    setIsBatchGeneratingVideos(false);
-    setActiveVideoSlots([]);
-    playGrandFinaleChime();
-    startTitlePulsing('🔔 (10/10 READY!) Magic Countdown');
-    sendDesktopNotification('🎉 All 10 Countdown Videos Ready!', {
-      body: 'Your 30-second AI countdown clips have finished generating. Click here to preview with audio!',
-    });
+    // In Express Director mode: autonomously proceed directly to 4K Extended Master Cut export!
+    if (directorMode === 'express' || isAutopilotRunningRef.current) {
+      // Set export loading flags BEFORE clearing batch video generating so isAnyActive NEVER drops
+      setIsExportingExtendedMaster(true);
+      setIsExportingMaster(true);
+      setIsBatchGeneratingVideos(false);
+      setActiveVideoSlots([]);
+
+      const activeJobId = currentJobIdRef.current || currentJobId;
+      const activeSlots = slotsRef.current || slots;
+      await handleExportExtendedMaster('4k', activeJobId || undefined, activeSlots);
+    } else {
+      setIsBatchGeneratingVideos(false);
+      setActiveVideoSlots([]);
+      playStepSuccessChime();
+      const customer = brandName.trim() || (currentJobIdRef.current ? currentJobIdRef.current.split('-')[0] : 'Client');
+      startTitlePulsing(`🔔 ${customer} (10/10 Ready!)`, `${customer} • [10/10 Clips] Countdown`);
+      sendDesktopNotification(`🎉 ${customer}: All 10 Countdown Videos Ready!`, {
+        body: `Your 30-second AI countdown clips for ${customer} have finished generating. Click here to preview with audio!`,
+      });
+    }
   };
 
   // 4. Update Temporal Config for Slot
@@ -1488,6 +1708,8 @@ export const App: React.FC = () => {
     const is4K = engine !== 'FAST_720P';
 
     const userEmail = authUser?.email || localStorage.getItem('saved_google_email') || creatorLdap || '';
+    const activeJobId = currentJobIdRef.current || currentJobId;
+    const activeSlots = slotsRef.current || slots;
 
     requestNotificationPermission().catch(() => {});
     try {
@@ -1495,7 +1717,7 @@ export const App: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          slotsConfig: slots.map((s) => ({
+          slotsConfig: activeSlots.map((s) => ({
             index: s.index,
             processedVideoUri: s.processedVideoUri,
             rawVideoUri: s.rawVideoUri,
@@ -1503,7 +1725,7 @@ export const App: React.FC = () => {
           })),
           qualityMode: is4K ? 'FULL_4K' : 'FAST_720P',
           upscaleEngine: engine,
-          jobId: currentJobId,
+          jobId: activeJobId,
           userEmail,
         }),
       });
@@ -1516,10 +1738,18 @@ export const App: React.FC = () => {
         } else {
           setMaster720pUri(data.masterVideoUri);
         }
+        if (data.renderDurationSeconds) {
+          setProjectRenderMetrics((prev) => ({
+            ...(prev || {}),
+            [is4K ? 'master4kRenderSeconds' : 'master720pRenderSeconds']: data.renderDurationSeconds,
+            lastUpdated: new Date().toISOString(),
+          }));
+        }
+        const customer = brandName.trim() || (activeJobId ? activeJobId.split('-')[0] : 'Client');
         playGrandFinaleChime();
-        startTitlePulsing('✨ (FINAL CUT READY!) Magic Countdown');
-        sendDesktopNotification('🎬 Final Cut Ready!', {
-          body: 'Your 30-second countdown final cut has finished rendering and is ready to download.',
+        startTitlePulsing(`✨ ${customer} (Final Cut Ready!)`, `${customer} • [Final Cut Ready] Countdown`);
+        sendDesktopNotification(`🎬 ${customer}: Final Cut Ready!`, {
+          body: `Your 30-second countdown final cut for ${customer} has finished rendering and is ready to download.`,
         });
       } else {
         setExportError(data.error || 'Failed to export master video.');
@@ -1532,8 +1762,18 @@ export const App: React.FC = () => {
   };
 
   // 6. Trigger Extended Master Export (+ Google I/O Outro with 2-second Fade Transition)
-  const handleExportExtendedMaster = async (resolution: '720p' | '4k' = '4k') => {
-    if (!currentJobId) return;
+  const handleExportExtendedMaster = async (
+    resolution: '720p' | '4k' = '4k',
+    overrideJobId?: string,
+    overrideSlots?: CountdownSlot[]
+  ) => {
+    const activeJobId = overrideJobId || currentJobIdRef.current || currentJobId;
+    if (!activeJobId) {
+      console.warn('[EXPORT] Cannot export extended master: missing activeJobId');
+      return;
+    }
+    const activeSlots = overrideSlots || slotsRef.current || slots;
+
     setIsExportingExtendedMaster(true);
     setExportError(null);
     requestNotificationPermission().catch(() => {});
@@ -1542,15 +1782,19 @@ export const App: React.FC = () => {
     const userEmail = authUser?.email || localStorage.getItem('saved_google_email') || creatorLdap || '';
     let effectiveMasterUri = is4K ? (master4kUri || masterVideoUri) : (master720pUri || masterVideoUri);
 
+    const latestTakeTs = getLatestSlotVideoTimestamp(activeSlots);
+    const baseMasterTs = extractTimestampFromUri(effectiveMasterUri);
+    const isBaseMasterOutdated = Boolean(latestTakeTs > 0 && baseMasterTs > 0 && latestTakeTs > baseMasterTs);
+
     try {
-      // If 30s master has not been generated yet for this resolution, assemble it first
-      if (!effectiveMasterUri) {
+      // If 30s master has not been generated yet for this resolution OR is outdated compared to active scene takes, assemble it first
+      if (!effectiveMasterUri || isBaseMasterOutdated) {
         setIsExportingMaster(true);
         const resMaster = await fetch(`${API_BASE}/api/export-master`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            slotsConfig: slots.map((s) => ({
+            slotsConfig: activeSlots.map((s) => ({
               index: s.index,
               processedVideoUri: s.processedVideoUri,
               rawVideoUri: s.rawVideoUri,
@@ -1558,7 +1802,7 @@ export const App: React.FC = () => {
             })),
             qualityMode: is4K ? 'FULL_4K' : 'FAST_720P',
             upscaleEngine: is4K ? 'LANCZOS_4K' : 'FAST_720P',
-            jobId: currentJobId,
+            jobId: activeJobId,
             userEmail,
           }),
         });
@@ -1569,8 +1813,16 @@ export const App: React.FC = () => {
           setMasterVideoUri(masterData.masterVideoUri);
           if (is4K) setMaster4kUri(masterData.masterVideoUri);
           else setMaster720pUri(masterData.masterVideoUri);
+          if (masterData.renderDurationSeconds) {
+            setProjectRenderMetrics((prev) => ({
+              ...(prev || {}),
+              [is4K ? 'master4kRenderSeconds' : 'master720pRenderSeconds']: masterData.renderDurationSeconds,
+              lastUpdated: new Date().toISOString(),
+            }));
+          }
         } else {
           setExportError(masterData.error || 'Failed to assemble base countdown master.');
+          setIsExportingExtendedMaster(false);
           return;
         }
       }
@@ -1579,7 +1831,7 @@ export const App: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          jobId: currentJobId,
+          jobId: activeJobId,
           masterVideoUri: effectiveMasterUri,
           resolution,
           qualityMode: is4K ? 'FULL_4K' : 'FAST_720P',
@@ -1595,11 +1847,26 @@ export const App: React.FC = () => {
         } else {
           setExtended720pUri(data.extendedMasterVideoUri);
         }
+        if (data.renderDurationSeconds) {
+          setProjectRenderMetrics((prev) => ({
+            ...(prev || {}),
+            [is4K ? 'extended4kRenderSeconds' : 'extended720pRenderSeconds']: data.renderDurationSeconds,
+            lastUpdated: new Date().toISOString(),
+          }));
+        }
+        const customer = brandName.trim() || (activeJobId ? activeJobId.split('-')[0] : 'Client');
         playGrandFinaleChime();
-        startTitlePulsing('✨ (FULL VIDEO READY!) Magic Countdown');
-        sendDesktopNotification('🎬 2-Minute Full Video Ready!', {
-          body: 'Your combined 2-minute full video with event opening intro is ready to download.',
+        startTitlePulsing(`✨ ${customer} (FULL VIDEO READY!)`, `${customer} • 🎉 [4K Ready!] Countdown`);
+        sendDesktopNotification(`🎬 ${customer}: 2-Minute Full Video Ready!`, {
+          body: `Your 2-minute video for ${customer} (30s countdown + Google I/O 2026 inspirational AI film) is ready to download.`,
         });
+
+        // If auto-upload to YouTube is enabled, automatically upload the 4K video!
+        if (autoUploadYouTube) {
+          setTimeout(() => {
+            handleUploadToYouTube(data.extendedMasterVideoUri);
+          }, 800);
+        }
       } else {
         setExportError(data.error || 'Failed to export extended master video.');
       }
@@ -1608,6 +1875,245 @@ export const App: React.FC = () => {
     } finally {
       setIsExportingExtendedMaster(false);
       setIsExportingMaster(false);
+      isAutopilotRunningRef.current = false;
+    }
+  };
+
+  // 7. YouTube Upload Handler
+  const handleUploadToYouTube = async (targetVideoUri?: string) => {
+    const uri = targetVideoUri || extended4kUri || master4kUri;
+    if (!uri) {
+      setYoutubeUploadError('No 4K video ready to upload to YouTube.');
+      return;
+    }
+    setIsUploadingYouTube(true);
+    setYoutubeUploadError(null);
+    try {
+      const accessToken = await requestYouTubeAccessToken();
+      const res = await fetch(`${API_BASE}/api/youtube/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoUri: uri,
+          title: `${brandName || 'Client'} - 4K Broadcast Countdown (Director's Cut)`,
+          description: `4K 60fps Broadcast Countdown for ${brandName || 'Client'} generated with Magic Countdown Maker.`,
+          privacyStatus: 'unlisted',
+          accessToken,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.youtubeUrl) {
+        setYoutubeUrl(data.youtubeUrl);
+        playGrandFinaleChime();
+      } else {
+        setYoutubeUploadError(data.error || 'Failed to upload video to YouTube.');
+      }
+    } catch (err: any) {
+      console.error('YouTube upload failed:', err);
+      setYoutubeUploadError(err.message || 'YouTube upload error');
+    } finally {
+      setIsUploadingYouTube(false);
+    }
+  };
+
+  // Redo Deliverable Handlers
+  const handleRedoWallpaper = async () => {
+    const brand = brandName.trim() || 'Client';
+    const promptToUse =
+      wallpaperPrompt ||
+      `Ultra-wide panoramic 32:9 cinema welcome wallpaper for ${brand} in ${customerIndustry || 'enterprise industry'}, panoramic wide angle landscape at golden hour sunset, dramatic warm sun flare, cinematic lighting, shot on 65mm anamorphic lens, 4k ultra-high resolution, clean expansive composition without text, 32:9 aspect ratio.`;
+    setIsGeneratingWallpaper(true);
+    setWallpaperError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/customer-meeting-package/generate-cinema-wallpaper`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: promptToUse,
+          brandName: brand,
+          companyUrl,
+          apiKey,
+          jobId: currentJobId || 'global',
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.wallpaperUri) {
+        setCinemaWallpaperUri(data.wallpaperUri);
+        playStepSuccessChime();
+      } else {
+        setWallpaperError(data.error || 'Failed to regenerate 32:9 cinema wallpaper');
+      }
+    } catch (e: any) {
+      setWallpaperError(e.message);
+    } finally {
+      setIsGeneratingWallpaper(false);
+    }
+  };
+
+  const handleRedoBugdroid = async () => {
+    const brand = brandName.trim() || 'Client';
+    const promptToUse =
+      bugdroidPrompt ||
+      `A 3D render of a cute Android Bugdroid character standing centered on a solid pure black background (#000000). The Bugdroid is dressed as a worker in the ${customerIndustry || 'industry'} and wearing a clean crisp white t-shirt with the official ${brand} logo printed crisply in the center of the chest. High resolution 3D digital art, Pixar-quality studio lighting, sharp details, centered composition.`;
+    setIsGeneratingBugdroid(true);
+    setBugdroidError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/customer-meeting-package/generate-bugdroid-mascot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: promptToUse,
+          brandName: brand,
+          companyUrl,
+          apiKey,
+          jobId: currentJobId || 'global',
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.bugdroidUri) {
+        setBugdroidMascotUri(data.bugdroidUri);
+        playStepSuccessChime();
+      } else {
+        setBugdroidError(data.error || 'Failed to regenerate Bugdroid mascot');
+      }
+    } catch (e: any) {
+      setBugdroidError(e.message);
+    } finally {
+      setIsGeneratingBugdroid(false);
+    }
+  };
+
+  // 8. Express Director: Customer Meeting Package 1-Click Autonomous Generator
+  const handleStartExpressAutopilot = async () => {
+    if (!companyUrl.trim()) return;
+    isAutopilotRunningRef.current = true;
+    setYoutubeUrl(null);
+    setYoutubeUploadError(null);
+    setWallpaperError(null);
+    setBugdroidError(null);
+
+    // Extract brand name from domain if user did not provide one
+    let brand = brandName.trim();
+    if (!brand) {
+      try {
+        const parsed = new URL(companyUrl.startsWith('http') ? companyUrl : `https://${companyUrl}`);
+        brand = parsed.hostname.replace(/^www\./, '').split('.')[0];
+        brand = brand.charAt(0).toUpperCase() + brand.slice(1);
+        setBrandName(brand);
+      } catch {
+        brand = 'Client';
+      }
+    }
+
+    // Step 1: Analyze Brand & Extract Meeting Package Prompts via Gemini 3.8 Flash
+    let activeWallpaperPrompt = wallpaperPrompt;
+    let activeBugdroidPrompt = bugdroidPrompt;
+
+    try {
+      const analyzeRes = await fetch(`${API_BASE}/api/customer-meeting-package/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyUrl,
+          brandName: brand,
+          apiKey,
+        }),
+      });
+      if (analyzeRes.ok) {
+        const analyzeData = await analyzeRes.json();
+        if (analyzeData.success) {
+          if (analyzeData.brandName) {
+            brand = analyzeData.brandName;
+            setBrandName(brand);
+          }
+          if (analyzeData.industry) {
+            setCustomerIndustry(analyzeData.industry);
+          }
+          if (analyzeData.cinemaWallpaperPrompt) {
+            activeWallpaperPrompt = analyzeData.cinemaWallpaperPrompt;
+            setWallpaperPrompt(activeWallpaperPrompt);
+          }
+          if (analyzeData.bugdroidMascotPrompt) {
+            activeBugdroidPrompt = analyzeData.bugdroidMascotPrompt;
+            setBugdroidPrompt(activeBugdroidPrompt);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[MEETING_PACKAGE] Analysis non-fatal error:', e);
+    }
+
+    // Step 2: Trigger 32:9 Cinema Wallpaper if selected
+    if (includeCinemaWallpaper && activeWallpaperPrompt) {
+      setIsGeneratingWallpaper(true);
+      fetch(`${API_BASE}/api/customer-meeting-package/generate-cinema-wallpaper`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: activeWallpaperPrompt,
+          brandName: brand,
+          companyUrl,
+          apiKey,
+          jobId: currentJobId || 'global',
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.wallpaperUri) {
+            setCinemaWallpaperUri(data.wallpaperUri);
+            playStepSuccessChime();
+          } else {
+            setWallpaperError(data.error || 'Failed to generate 32:9 cinema wallpaper');
+          }
+        })
+        .catch((err) => setWallpaperError(err.message))
+        .finally(() => setIsGeneratingWallpaper(false));
+    }
+
+    // Step 3: Trigger Branded Bugdroid Mascot if selected
+    if (includeBugdroidMascot && activeBugdroidPrompt) {
+      setIsGeneratingBugdroid(true);
+      fetch(`${API_BASE}/api/customer-meeting-package/generate-bugdroid-mascot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: activeBugdroidPrompt,
+          brandName: brand,
+          companyUrl,
+          apiKey,
+          jobId: currentJobId || 'global',
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.bugdroidUri) {
+            setBugdroidMascotUri(data.bugdroidUri);
+            playStepSuccessChime();
+          } else {
+            setBugdroidError(data.error || 'Failed to render Bugdroid mascot');
+          }
+        })
+        .catch((err) => setBugdroidError(err.message))
+        .finally(() => setIsGeneratingBugdroid(false));
+    }
+
+    // Step 4: Trigger 2-Minute 4K Countdown Video if selected
+    if (includeCountdownVideo) {
+      if (autoUploadYouTube && !getCachedYouTubeToken()) {
+        try {
+          await requestYouTubeAccessToken();
+        } catch (e: any) {
+          console.warn('YouTube token request was cancelled or deferred:', e);
+        }
+      }
+
+      await handleGeneratePrompts(
+        brand,
+        themeContext || `${brand} dynamic diegetic countdown, futuristic engineering, 60fps cinematic`,
+        styleModifiers || 'Hyper-modern commercial cinematography, anamorphic lens',
+        creatorLdap || '',
+        companyUrl
+      );
     }
   };
 
@@ -1627,6 +2133,51 @@ export const App: React.FC = () => {
     }
   }, [currentStage, videosCompletedCount, isBatchGeneratingVideos]);
 
+  // Dynamically update document title with Customer name & stage status for multi-tab clarity
+  useEffect(() => {
+    const customer =
+      brandName.trim() ||
+      (companyUrl ? companyUrl.replace(/^https?:\/\//, '').replace(/^www\./, '').split('.')[0] : '') ||
+      (currentJobId ? currentJobId.split('-')[0] : '');
+    const prefix = customer ? `${customer} • ` : '';
+
+    let stageStatus = 'Meeting Package';
+    if (extended4kUri || master4kUri || (cinemaWallpaperUri && bugdroidMascotUri && !includeCountdownVideo)) {
+      stageStatus = '🎉 [Ready!]';
+    } else if (isExportingExtendedMaster || isExportingMaster) {
+      stageStatus = '[Mastering 4K]';
+    } else if (isBatchGeneratingVideos || videosCompletedCount > 0) {
+      stageStatus = `[${videosCompletedCount}/10 Clips]`;
+    } else if (isGeneratingWallpaper || isGeneratingBugdroid) {
+      stageStatus = '[Generating Assets]';
+    } else if (isGeneratingPrompts) {
+      stageStatus = '[Scripting]';
+    } else if (directorMode === 'expert') {
+      stageStatus = `Stage ${currentStage}`;
+    }
+
+    const fullTitle = `${prefix}${stageStatus} Executive Package`;
+    document.title = fullTitle;
+  }, [
+    brandName,
+    companyUrl,
+    currentJobId,
+    currentStage,
+    directorMode,
+    extended4kUri,
+    master4kUri,
+    cinemaWallpaperUri,
+    bugdroidMascotUri,
+    isGeneratingWallpaper,
+    isGeneratingBugdroid,
+    includeCountdownVideo,
+    isExportingMaster,
+    isExportingExtendedMaster,
+    isBatchGeneratingVideos,
+    isGeneratingPrompts,
+    videosCompletedCount,
+  ]);
+
   const handleAuthenticate = (user: { email: string; name: string; ldap?: string; picture?: string }) => {
     const rawEmail = (user.email || '').trim().toLowerCase();
     const cleanEmail = rawEmail === 'user@google.com' ? '' : rawEmail;
@@ -1644,19 +2195,47 @@ export const App: React.FC = () => {
     }
     localStorage.setItem('auth_user', JSON.stringify(validUser));
 
-    // Open welcome guide after password gate if user has not declined it
+    // Open welcome guide after corporate authentication if user has not declined it
     if (localStorage.getItem('dismissed_welcome_guide') !== 'true') {
       setShowWelcomeGuide(true);
     }
   };
 
+  // Listen for session expiration events from the API interceptor
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      setAuthUser(null);
+    };
+    window.addEventListener('auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('auth-expired', handleAuthExpired);
+  }, []);
+
   const handleSignOut = () => {
     setAuthUser(null);
     localStorage.removeItem('auth_user');
+    localStorage.removeItem('auth_token');
+    const win = window as any;
+    if (win.google?.accounts?.id) {
+      try {
+        win.google.accounts.id.disableAutoSelect();
+      } catch {}
+    }
+  };
+
+  const handleScrollToExportStudio = () => {
+    if (currentStage < 3) {
+      setCurrentStage(3);
+    }
+    setTimeout(() => {
+      const el = document.getElementById('final-cut-export-studio');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 120);
   };
 
   if (!authUser) {
-    return <PasswordGate onAuthenticate={handleAuthenticate} />;
+    return <GoogleAuthGate onAuthenticate={handleAuthenticate} />;
   }
 
   return (
@@ -1689,12 +2268,80 @@ export const App: React.FC = () => {
         onOpenPromptGuide={() => setShowPromptGuideModal(true)}
         hasCustomPromptGuide={Boolean(customPromptGuide && customPromptGuide.trim().length > 0)}
         onOpenWelcomeGuide={() => setShowWelcomeGuide(true)}
+        directorMode={directorMode}
+        onDirectorModeChange={handleDirectorModeChange}
+        brandName={brandName}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
-        {/* Stepper Progress Indicator */}
-        <div className="flex items-center justify-between max-w-4xl mx-auto px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+        {directorMode === 'express' ? (
+          <ExpressDirectorView
+            companyUrl={companyUrl}
+            onCompanyUrlChange={setCompanyUrl}
+            brandName={brandName}
+            onBrandNameChange={setBrandName}
+            themeContext={themeContext}
+            onThemeContextChange={setThemeContext}
+            industry={customerIndustry}
+            includeCinemaWallpaper={includeCinemaWallpaper}
+            onIncludeCinemaWallpaperChange={setIncludeCinemaWallpaper}
+            includeBugdroidMascot={includeBugdroidMascot}
+            onIncludeBugdroidMascotChange={setIncludeBugdroidMascot}
+            includeCountdownVideo={includeCountdownVideo}
+            onIncludeCountdownVideoChange={setIncludeCountdownVideo}
+            cinemaWallpaperUri={cinemaWallpaperUri}
+            bugdroidMascotUri={bugdroidMascotUri}
+            isGeneratingWallpaper={isGeneratingWallpaper}
+            isGeneratingBugdroid={isGeneratingBugdroid}
+            wallpaperError={wallpaperError}
+            bugdroidError={bugdroidError}
+            onRedoWallpaper={handleRedoWallpaper}
+            onRedoBugdroid={handleRedoBugdroid}
+            isGeneratingPrompts={isGeneratingPrompts}
+            isBatchGeneratingVideos={isBatchGeneratingVideos}
+            isExportingMaster={isExportingMaster}
+            isExportingExtendedMaster={isExportingExtendedMaster}
+            slots={slots}
+            veoQueueStatus={veoQueueStatus}
+            extended4kUri={extended4kUri}
+            master4kUri={master4kUri}
+            youtubeUrl={youtubeUrl}
+            isUploadingYouTube={isUploadingYouTube}
+            youtubeUploadError={youtubeUploadError}
+            autoUploadYouTube={autoUploadYouTube}
+            onAutoUploadYouTubeChange={handleAutoUploadYouTubeChange}
+            onStartAutopilot={handleStartExpressAutopilot}
+            onSwitchToExpert={() => handleDirectorModeChange('expert')}
+            onUploadToYouTube={() => handleUploadToYouTube()}
+            onResetProject={handleCreateNewJob}
+            onExportExtended={handleExportExtendedMaster}
+            exportError={exportError}
+          />
+        ) : (
+          <>
+            {/* Customer & Stage Breadcrumb Bar */}
+            <div className="max-w-4xl mx-auto flex items-center justify-between px-2 pt-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Customer:</span>
+                <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <span className="px-3 py-0.5 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30 text-xs font-black">
+                    {brandName && brandName.trim() ? brandName.trim() : 'New Client Project'}
+                  </span>
+                  {currentJobId && (
+                    <span className="text-xs font-mono text-slate-400 font-normal">
+                      ({currentJobId})
+                    </span>
+                  )}
+                </span>
+              </div>
+              <span className="text-xs font-semibold text-slate-500">
+                Stage {currentStage} of 4 • {videosCompletedCount}/10 clips ready
+              </span>
+            </div>
+
+            {/* Stepper Progress Indicator */}
+            <div className="flex items-center justify-between max-w-4xl mx-auto px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
           {[
             { num: 1, label: '1. Visual Concepts' },
             { num: 2, label: '2. Scene Generation' },
@@ -1707,7 +2354,7 @@ export const App: React.FC = () => {
                 onClick={() => {
                   if (st.num <= currentStage || videosCompletedCount > 0) {
                     if (st.num === 4) {
-                      setShowExportModal(true);
+                      handleScrollToExportStudio();
                     } else {
                       setCurrentStage(st.num);
                     }
@@ -1774,9 +2421,11 @@ export const App: React.FC = () => {
               isLoading={isGeneratingPrompts}
               initialBrandName={brandName}
               initialCompanyUrl={companyUrl}
+              onChangeCompanyUrl={setCompanyUrl}
               initialThemeContext={themeContext}
               initialCreatorLdap={creatorLdap}
               onOpenStepGuide={() => handleOpenStepGuide('step-1')}
+              onOpenPromptGuide={() => setShowPromptGuideModal(true)}
             />
           </div>
         )}
@@ -1809,8 +2458,10 @@ export const App: React.FC = () => {
             onProceedToPreview={() => setCurrentStage(3)}
             onRetrySlot={(idx) => handleGenerateVideoForSlot(idx, 1, selectedVideoQuality)}
             onRetryAllFailed={() => handleGenerateAllVideos(selectedVideoQuality)}
+            onRegenerateAll={() => handleGenerateAllVideos(selectedVideoQuality, undefined, true)}
             onOpenStepGuide={() => handleOpenStepGuide('step-2')}
             currentJobId={currentJobId}
+            brandName={brandName}
           />
         )}
 
@@ -1848,7 +2499,7 @@ export const App: React.FC = () => {
                 slots={slots}
                 audioTrackUri="/countdown/countdown_track.mp3"
                 masterVideoUri={masterVideoUri || master720pUri || master4kUri}
-                onProceedToMaster={() => setShowExportModal(true)}
+                onProceedToMaster={handleScrollToExportStudio}
                 onSelectSlot={handleSelectSequentialSlot}
               />
             </div>
@@ -1862,101 +2513,35 @@ export const App: React.FC = () => {
               onRecreatePrompt={handleRecreatePrompt}
               onRedoVideo={(idx) => handleGenerateVideoForSlot(idx, 1, selectedVideoQuality)}
               onPlayVideo={setPreviewVideoUri}
-              onProceedToMaster={() => setShowExportModal(true)}
+              onProceedToMaster={handleScrollToExportStudio}
               veoQueueStatus={veoQueueStatus}
             />
           </div>
         )}
 
-        {/* Export Final Cut / Full Video Assembly Banner */}
+        {/* Step 4: Inline Final Cut & Full Video Assembly Studio */}
         {currentStage >= 2 && videosCompletedCount > 0 && (
-          <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-slate-900 via-slate-900 to-blue-950 text-white border border-slate-800 shadow-2xl flex flex-col lg:flex-row lg:items-center justify-between gap-6 animate-fadeIn">
-            <div className="space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-base font-extrabold flex items-center gap-2">
-                  <Film className="w-5 h-5 text-[#4285F4]" />
-                  <span>Assemble &amp; Export Final Cut</span>
-                </h3>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-950/80 text-blue-300 border border-blue-800">
-                  {videosCompletedCount}/10 Scenes Ready
-                </span>
-                {masterVideoUri && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    30s Final Cut Ready
-                  </span>
-                )}
-                {extendedMasterVideoUri && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Extended Full Video Ready (~2m)
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-300 max-w-xl">
-                Choose between the standalone 30-second countdown final cut or the extended broadcast full video paired with the event opening video and a smooth 2-second crossfade.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Ready Final Cut Actions (Play & Download) */}
-              {masterVideoUri && (
-                <div className="flex items-center gap-1 p-1 rounded-2xl bg-blue-950/60 border border-blue-500/40 shadow-lg shadow-blue-500/10">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewVideoUri(masterVideoUri)}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#4285F4] hover:bg-blue-600 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all active:scale-95 cursor-pointer"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-white" />
-                    <span>Play 30s Final Cut</span>
-                  </button>
-                  <a
-                    href={getMediaUrl(masterVideoUri)}
-                    download="countdown_30s_final_cut.mp4"
-                    className="p-2.5 rounded-xl text-blue-300 hover:text-white hover:bg-blue-900/50 transition-colors"
-                    title="Download 30s Final Cut MP4"
-                  >
-                    <Download className="w-4 h-4" />
-                  </a>
-                </div>
-              )}
-
-              {extendedMasterVideoUri && (
-                <div className="flex items-center gap-1 p-1 rounded-2xl bg-purple-950/60 border border-purple-500/40 shadow-lg shadow-purple-500/10">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewVideoUri(extendedMasterVideoUri)}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md shadow-purple-600/20 transition-all active:scale-95 cursor-pointer"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-white" />
-                    <span>Play Extended Full Video (~2m)</span>
-                  </button>
-                  <a
-                    href={getMediaUrl(extendedMasterVideoUri)}
-                    download="countdown_extended_full_video.mp4"
-                    className="p-2.5 rounded-xl text-purple-300 hover:text-white hover:bg-purple-900/50 transition-colors"
-                    title="Download Extended Full Video MP4"
-                  >
-                    <Download className="w-4 h-4" />
-                  </a>
-                </div>
-              )}
-
-              {/* Single Primary Action */}
-              <button
-                type="button"
-                onClick={() => setShowExportModal(true)}
-                className={`flex items-center gap-2 px-6 py-3.5 rounded-2xl text-white font-extrabold text-sm shadow-xl transition-all hover:scale-105 active:scale-95 cursor-pointer ${
-                  masterVideoUri || extendedMasterVideoUri
-                    ? 'bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200'
-                    : 'bg-[#4285F4] hover:bg-blue-600 shadow-blue-500/25'
-                }`}
-              >
-                <Film className="w-4 h-4 text-[#4285F4]" />
-                <span>Create Final Cut</span>
-              </button>
-            </div>
-          </div>
+          <FinalCutExportStudio
+            slots={slots}
+            masterVideoUri={masterVideoUri}
+            master720pUri={master720pUri}
+            master4kUri={master4kUri}
+            extendedMasterVideoUri={extendedMasterVideoUri}
+            extended720pUri={extended720pUri}
+            extended4kUri={extended4kUri}
+            isExporting={isExportingMaster}
+            isExportingExtended={isExportingExtendedMaster}
+            projectRenderMetrics={projectRenderMetrics}
+            onExport={handleExportMaster}
+            onExportExtended={handleExportExtendedMaster}
+            onPlayVideo={setPreviewVideoUri}
+            onOpenStepGuide={() => handleOpenStepGuide('step-6')}
+            youtubeUrl={youtubeUrl}
+            isUploadingYouTube={isUploadingYouTube}
+            onUploadToYouTube={() => handleUploadToYouTube()}
+          />
+        )}
+          </>
         )}
 
         {/* Recent Master Countdowns Carousel */}
@@ -1983,13 +2568,30 @@ export const App: React.FC = () => {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-3xl w-full p-4 shadow-2xl space-y-3">
             <div className="flex justify-between items-center">
-              <span className="text-xs font-bold text-slate-900 dark:text-white">Video Preview</span>
-              <button
-                onClick={() => setPreviewVideoUri(null)}
-                className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white"
-              >
-                ✕
-              </button>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold text-slate-900 dark:text-white">Video Preview</span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-xs font-mono">
+                  {previewVideoUri.split('/').pop()}
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <a
+                  href={`${getMediaUrl(previewVideoUri)}?download=1`}
+                  download
+                  className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white shadow-md transition-all active:scale-95"
+                  title="Download full resolution MP4"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download MP4</span>
+                </a>
+                <button
+                  onClick={() => setPreviewVideoUri(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  title="Close Preview"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
             <div className="aspect-video bg-black rounded-2xl overflow-hidden flex items-center justify-center">
               <video
@@ -1998,33 +2600,12 @@ export const App: React.FC = () => {
                 loop
                 playsInline
                 controls
+                controlsList="nodownload"
                 className="w-full h-full object-contain"
               />
             </div>
           </div>
         </div>
-      )}
-
-      {/* Master Export Modal */}
-      {showExportModal && (
-        <MasterExportModal
-          isOpen={showExportModal}
-          onClose={() => setShowExportModal(false)}
-          masterVideoUri={masterVideoUri}
-          master720pUri={master720pUri}
-          master4kUri={master4kUri}
-          extendedMasterVideoUri={extendedMasterVideoUri}
-          extended720pUri={extended720pUri}
-          extended4kUri={extended4kUri}
-          isExporting={isExportingMaster}
-          isExportingExtended={isExportingExtendedMaster}
-          totalDuration={30.0}
-          error={exportError}
-          onExport={handleExportMaster}
-          onExportExtended={handleExportExtendedMaster}
-          initialTab={exportModalInitialTab}
-          onOpenStepGuide={() => handleOpenStepGuide('step-6')}
-        />
       )}
 
       {/* Veo Prompt Engineering Guide Modal */}

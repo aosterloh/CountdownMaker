@@ -51,15 +51,15 @@ export const MasterExportModal: React.FC<MasterExportModalProps> = ({
   error,
   onExport,
   onExportExtended,
-  initialTab = '30s',
+  initialTab = 'extended',
   onOpenStepGuide,
 }) => {
   // 2 Major Decisions State
   const [selectedDuration, setSelectedDuration] = useState<'30s' | '2min'>(
-    initialTab === 'extended' ? '2min' : '30s'
+    initialTab === '30s' ? '30s' : '2min'
   );
-  const [selectedQuality, setSelectedQuality] = useState<'720p' | '4k'>('720p');
-  const [activePreviewType, setActivePreviewType] = useState<'30s-720p' | '30s-4k' | '2m-720p' | '2m-4k'>('30s-720p');
+  const [selectedQuality, setSelectedQuality] = useState<'720p' | '4k'>('4k');
+  const [activePreviewType, setActivePreviewType] = useState<'30s-720p' | '30s-4k' | '2m-720p' | '2m-4k'>('2m-4k');
   const [activeExportMode, setActiveExportMode] = useState<'6a' | '6b' | '6c' | '6d' | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -310,6 +310,7 @@ export const MasterExportModal: React.FC<MasterExportModalProps> = ({
                     preload="metadata"
                     playsInline
                     controls
+                    controlsList="nodownload"
                     autoPlay
                     className="w-full h-full object-contain"
                   />
@@ -415,7 +416,7 @@ export const MasterExportModal: React.FC<MasterExportModalProps> = ({
                 <span className="text-[11px] text-slate-400">Select content layout</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 {/* Option 1: 30-Second Countdown Only */}
                 <button
                   type="button"
@@ -466,6 +467,11 @@ export const MasterExportModal: React.FC<MasterExportModalProps> = ({
                       : 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
                   }`}
                 >
+                  {/* Recommended Title Badge Over Box */}
+                  <div className="absolute -top-3 right-4 z-10 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white text-[10px] font-black tracking-wider uppercase shadow-md flex items-center gap-1 border border-white/20">
+                    <Sparkles className="w-3 h-3 text-amber-300 fill-amber-300" />
+                    <span>Recommended</span>
+                  </div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-extrabold text-white flex items-center gap-1.5">
                       <Layers className="w-3.5 h-3.5 text-emerald-400" />
@@ -528,7 +534,7 @@ export const MasterExportModal: React.FC<MasterExportModalProps> = ({
                 <span className="text-[11px] text-slate-400">Choose render profile</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                 {/* 720p Quick Draft */}
                 <button
                   type="button"
@@ -557,12 +563,17 @@ export const MasterExportModal: React.FC<MasterExportModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setSelectedQuality('4k')}
-                  className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                  className={`p-3.5 rounded-2xl border text-left transition-all relative cursor-pointer ${
                     selectedQuality === '4k'
                       ? 'bg-slate-900 border-purple-500 ring-2 ring-purple-500/30 shadow-lg'
                       : 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
                   }`}
                 >
+                  {/* Recommended Title Badge Over Box */}
+                  <div className="absolute -top-3 right-4 z-10 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white text-[10px] font-black tracking-wider uppercase shadow-md flex items-center gap-1 border border-white/20">
+                    <Sparkles className="w-3 h-3 text-amber-300 fill-amber-300" />
+                    <span>Recommended</span>
+                  </div>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs font-extrabold text-white flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-purple-400" />

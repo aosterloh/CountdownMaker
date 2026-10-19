@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Key, Activity, Sun, Moon, Sparkles, ExternalLink, CheckCircle2, X, Terminal, RefreshCw, Image as ImageIcon, ShieldCheck, FolderOpen, Plus, HelpCircle, Volume2, VolumeX, Film, Play, LogOut, MoreHorizontal, FileText, Settings } from 'lucide-react';
+import { Key, Activity, Sun, Moon, Sparkles, ExternalLink, CheckCircle2, X, Terminal, RefreshCw, Image as ImageIcon, ShieldCheck, FolderOpen, Plus, HelpCircle, Volume2, VolumeX, Film, Play, LogOut, MoreHorizontal, FileText, Settings, Zap } from 'lucide-react';
 import { ImageModelType, VeoModelType, AuthMode, JobSummary } from '../types';
 import { getMediaUrl } from '../utils/media';
 import { ProjectsModal } from './ProjectsModal';
@@ -32,6 +32,9 @@ interface HeaderProps {
   onOpenPromptGuide?: () => void;
   hasCustomPromptGuide?: boolean;
   onOpenWelcomeGuide?: () => void;
+  directorMode?: 'express' | 'expert';
+  onDirectorModeChange?: (mode: 'express' | 'expert') => void;
+  brandName?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -56,11 +59,14 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectJob,
   onCreateNewJob,
   onDeleteJob,
+  brandName,
   onBulkDeleteAllJobs,
   onRefreshJobs,
   onOpenPromptGuide,
   hasCustomPromptGuide = false,
   onOpenWelcomeGuide,
+  directorMode = 'express',
+  onDirectorModeChange,
 }) => {
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showBulkDeleteInModal, setShowBulkDeleteInModal] = useState(false);
@@ -147,10 +153,15 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const modelLabels: Record<ImageModelType, { name: string; desc: string; badge: string }> = {
+    'gemini-nano-banana-2.1': {
+      name: 'Gemini Nano Banana 2.1 (4K Ultra-Wide)',
+      desc: 'Latest high-fidelity multimodal image model with native 32:9 and 4K output',
+      badge: 'Latest 4K',
+    },
     'gemini-3.1-flash-image': {
-      name: 'Gemini Nano Banana (gemini-2.5-flash-image)',
-      desc: 'Flagship multimodal image model with direct diegetic number grounding',
-      badge: 'Active Model',
+      name: 'Gemini Nano Banana 2 (3.1 Flash Image)',
+      desc: 'Fast multimodal image model with direct diegetic number grounding',
+      badge: 'Fast Model',
     },
     'imagen-3.0-generate-002': {
       name: 'Google Imagen 3 (Photorealism)',
@@ -170,15 +181,15 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const veoModelLabels: Record<VeoModelType, { name: string; desc: string; badge: string }> = {
-    'veo-3.1-fast-generate-preview': {
-      name: 'Veo 3.1 Fast (Preview)',
-      desc: 'Rapid high-throughput video generation for quick iterative previews',
-      badge: '720p Turbo',
-    },
     'veo-3.1-generate-preview': {
-      name: 'Veo 3.1 Studio (Preview)',
-      desc: 'High fidelity video model for 4K UHD final exports',
-      badge: '4K Flagship',
+      name: 'Veo 3.1 Studio (4K Flagship)',
+      desc: 'Master quality high-fidelity video generation for broadcast 4K 60fps',
+      badge: '4K Studio',
+    },
+    'veo-3.1-fast-generate-preview': {
+      name: 'Veo 3.1 Fast',
+      desc: 'Rapid high-throughput video generation for quick iterative previews',
+      badge: 'Turbo',
     },
   };
 
@@ -197,8 +208,14 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              Magic Countdown Generator
+            <h1 className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
+              <span>Magic Countdown Generator</span>
+              {brandName && brandName.trim() && (
+                <span className="px-3 py-0.5 text-xs font-black rounded-full bg-gradient-to-r from-purple-500/15 via-indigo-500/15 to-blue-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30 flex items-center gap-1.5 shadow-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+                  <span>{brandName.trim()}</span>
+                </span>
+              )}
             </h1>
             {onOpenWelcomeGuide && (
               <button
@@ -227,6 +244,37 @@ export const Header: React.FC<HeaderProps> = ({
           </p>
         </div>
       </div>
+
+      {/* Director Mode Switcher: Express vs Expert */}
+      {onDirectorModeChange && (
+        <div className="hidden lg:flex items-center p-1 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-inner">
+          <button
+            type="button"
+            onClick={() => onDirectorModeChange('express')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              directorMode === 'express'
+                ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5 fill-current" />
+            <span>Express Director</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-white/20 text-white font-mono">DEFAULT</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onDirectorModeChange('expert')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              directorMode === 'expert'
+                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Film className="w-3.5 h-3.5" />
+            <span>Expert Director</span>
+          </button>
+        </div>
+      )}
 
       <div className="flex items-center gap-2.5">
         {/* Projects Popup Button (Shift+Click triggers Maintenance Mode) */}

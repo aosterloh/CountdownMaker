@@ -118,7 +118,7 @@ const STEP_DATA: Record<StepGuideId, StepInfo> = {
       {
         title: 'Decision 1: Video Length',
         description:
-          'Choose the standalone 30-second countdown or the full 2-minute version combined with the Google I/O keynote intro.',
+          'Choose the standalone 30-second countdown or the full 2-minute version transitioning into the Google I/O 2026 inspirational AI film.',
       },
       {
         title: 'Decision 2: Quality & Speed',

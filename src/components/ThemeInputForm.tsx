@@ -10,6 +10,9 @@ import {
   CheckCircle2,
   ArrowDown,
   X,
+  BookOpen,
+  ExternalLink,
+  Lightbulb,
 } from 'lucide-react';
 import { UNIVERSAL_STYLE_ANCHOR } from '../utils/promptBuilder';
 
@@ -24,9 +27,22 @@ interface ThemeInputFormProps {
   isLoading: boolean;
   initialBrandName?: string;
   initialCompanyUrl?: string;
+  onChangeCompanyUrl?: (url: string) => void;
   initialThemeContext?: string;
   initialCreatorLdap?: string;
   onOpenStepGuide?: () => void;
+  onOpenPromptGuide?: () => void;
+}
+
+export function formatVisualIdeasWithNewlines(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/(?:^|\n)\s*(\d{1,2}\.|\#\d{1,2}\b|(?:Numeral|Shot|Scene)\s*"?\d{1,2}"?:?)/gi, (match, prefix, offset) => {
+      return (offset === 0 ? '' : '\n\n') + prefix;
+    })
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 export const ThemeInputForm: React.FC<ThemeInputFormProps> = ({
@@ -34,9 +50,11 @@ export const ThemeInputForm: React.FC<ThemeInputFormProps> = ({
   isLoading,
   initialBrandName = '',
   initialCompanyUrl = '',
+  onChangeCompanyUrl,
   initialThemeContext = '',
   initialCreatorLdap = '',
   onOpenStepGuide,
+  onOpenPromptGuide,
 }) => {
   // Company URL & Brand detection
   const [companyUrl, setCompanyUrl] = useState(() => {
@@ -89,7 +107,7 @@ export const ThemeInputForm: React.FC<ThemeInputFormProps> = ({
 
   // Sync state if initial props change
   React.useEffect(() => {
-    if (initialCompanyUrl) setCompanyUrl(initialCompanyUrl);
+    if (initialCompanyUrl !== undefined) setCompanyUrl(initialCompanyUrl);
   }, [initialCompanyUrl]);
 
   React.useEffect(() => {
@@ -126,6 +144,7 @@ export const ThemeInputForm: React.FC<ThemeInputFormProps> = ({
     if (!/^https?:\/\//i.test(cleanedUrl)) {
       cleanedUrl = `https://${cleanedUrl}`;
       setCompanyUrl(cleanedUrl);
+      onChangeCompanyUrl?.(cleanedUrl);
     }
 
     try {
@@ -157,7 +176,7 @@ export const ThemeInputForm: React.FC<ThemeInputFormProps> = ({
       }
 
       if (data.visualIdeas) {
-        setThemeContext(data.visualIdeas);
+        setThemeContext(formatVisualIdeasWithNewlines(data.visualIdeas));
       }
       if (data.detectedBrandName) {
         setDetectedBrand(data.detectedBrandName);
@@ -328,7 +347,9 @@ export const ThemeInputForm: React.FC<ThemeInputFormProps> = ({
                   if (showUrlHelper) dismissUrlHelper();
                 }}
                 onChange={(e) => {
-                  setCompanyUrl(e.target.value);
+                  const val = e.target.value;
+                  setCompanyUrl(val);
+                  onChangeCompanyUrl?.(val);
                   if (ideasError) setIdeasError(null);
                   if (showUrlHelper) dismissUrlHelper();
                 }}
@@ -431,9 +452,52 @@ export const ThemeInputForm: React.FC<ThemeInputFormProps> = ({
             rows={isExpanded ? 14 : 7}
             value={themeContext}
             onChange={(e) => setThemeContext(e.target.value)}
-            placeholder="Click 'Get Visual Ideas' above to research 10 authentic visual scenes matching your company website URL, or write your own custom scenes here..."
+            placeholder="Click 'Get Visual Ideas' above to research 10 authentic visual scenes matching your company website URL, or write/paste 10 custom scenes generated externally via Gemini using the Creative Direction Guide..."
             className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 text-xs sm:text-sm focus:outline-none focus:border-[#4285F4] focus:ring-2 focus:ring-blue-500/20 transition-all font-mono leading-relaxed resize-y"
           />
+
+          {/* External Generation Explainer Callout (Gemini & Creative Guide) */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50/60 dark:from-slate-900 dark:to-blue-950/30 border border-blue-200 dark:border-blue-800/80 space-y-2.5">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 text-[#4285F4] shrink-0 mt-0.5">
+                <Lightbulb className="w-4 h-4 text-[#4285F4]" />
+              </div>
+              <div className="space-y-1 flex-1">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                    Pro Tip: Generate Outside with Gemini &amp; The Creative Guide
+                  </h4>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-blue-500/15 text-[#4285F4] border border-blue-500/20">
+                    Creative Alternative
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  In addition to <strong>Get Visual Ideas</strong> above, you can generate your 10 countdown scenes externally using <strong>Gemini</strong> (or your preferred LLM). Simply copy the prompt framework from the <strong>Creative Direction Guide</strong>, paste it into Gemini with your customer website or theme, and paste the 10 resulting scene descriptions (10 down to 1) directly into the box above.
+                </p>
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  {onOpenPromptGuide && (
+                    <button
+                      type="button"
+                      onClick={onOpenPromptGuide}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-slate-700 text-xs font-bold text-[#4285F4] border border-blue-200 dark:border-slate-700 shadow-sm transition-all cursor-pointer"
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>Open Creative Direction Guide</span>
+                    </button>
+                  )}
+                  <a
+                    href="https://gemini.google.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                  >
+                    <span>Open Gemini (gemini.google.com)</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Project Owner Google Email */}

@@ -1,8 +1,9 @@
-# ⏱️✨ Magic Countdown Generator
+# ⏱️✨ CountdownMaker — Customer Meeting Prep Studio
 
-> **Turn any brand, theme, or keynote idea into a broadcast-ready, synchronized 30-second countdown video and 2-minute event opener in minutes.**
+> **Turn any customer URL into high-impact meeting assets: broadcast-ready 30-second countdown videos, 4K ultra-wide (32:9) cinema welcome graphics, and branded Bugdroid mascots.**
 
 [![Cloud Run](https://img.shields.io/badge/Google%20Cloud-Run-4285F4?logo=googlecloud&logoColor=white)](https://cloud.google.com/run)
+[![Firebase](https://img.shields.io/badge/Firebase-Hosting%20%26%20Auth-FFCA28?logo=firebase&logoColor=black)](https://firebase.google.com/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-6.1-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
@@ -14,9 +15,12 @@
 
 ## 🌟 Overview
 
-The **Magic Countdown Generator** is an automated, AI-assisted video production studio tailored for conferences, keynotes, webinars, and live product launches. 
+The **CountdownMaker** is an automated, AI-assisted video and asset production studio tailored for customer meetings, keynotes, webinars, and cinema demonstrations.
 
-Instead of generic digital clock counters or hours in manual video editing software, the app generates **diegetic countdown scenes** (numbers 10 down to 1 naturally integrated into physical objects, architecture, nature, or product interfaces) matched to any customer brand or creative theme. Every scene is mathematically aligned to high-energy countdown music with a dramatic silence drop pause, culminating in broadcast-ready downloads.
+Enter any customer website URL and select the desired output features:
+1. **🎬 30-Second Countdown Video**: Diegetic 10-to-1 video scenes synchronized to golden beat audio with a dramatic drop pause, synthesized with Google **Veo 3.1 (4K UHD)**.
+2. **🖼️ 32:9 Cinema Welcome Graphic**: 4K ultra-wide welcome visuals tailored to the customer's industry (aviation, agriculture, enterprise tech, etc.) rendered with **Gemini Nano Banana 2.1**.
+3. **🤖 Branded Bugdroid Mascot**: An adorable Bugdroid mascot in customer industry attire wearing a custom branded T-shirt on a dark background.
 
 ---
 

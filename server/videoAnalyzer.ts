@@ -127,6 +127,7 @@ Return ONLY a valid JSON object matching this schema:
 }`;
 
     const candidateModels = [
+      'gemini-4-argon',
       'gemini-3.8-flash',
       'gemini-3.7-flash',
     ];

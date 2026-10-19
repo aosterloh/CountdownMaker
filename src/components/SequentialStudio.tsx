@@ -715,6 +715,7 @@ export const SequentialStudio: React.FC<SequentialStudioProps> = ({
                 key={activeSlot.processedVideoUri || activeSlot.rawVideoUri}
                 src={getMediaUrl(activeSlot.processedVideoUri || activeSlot.rawVideoUri)}
                 controls
+                controlsList="nodownload"
                 autoPlay
                 muted
                 loop

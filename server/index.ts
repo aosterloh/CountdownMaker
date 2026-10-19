@@ -7,6 +7,7 @@ import dns from 'dns';
 import { spawn, execSync } from 'child_process';
 import { EventEmitter } from 'events';
 import dotenv from 'dotenv';
+import { OAuth2Client } from 'google-auth-library';
 
 EventEmitter.defaultMaxListeners = 100;
 import {
@@ -33,7 +34,11 @@ import {
   ensureLocalAssetFile,
   ensureStaticAsset,
   StoredJobState,
+  RenderMetrics,
+  getGlobalRenderBenchmarks,
+  recordRenderBenchmark,
 } from './gcsStorage';
+
 
 import { upscaleVideo4K } from './upscaler';
 import { analyzeVideoSlot } from './videoAnalyzer';
@@ -130,6 +135,9 @@ export function markKeyAsExhausted(key: string) {
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+app.get('/healthz', (_req, res) => res.status(200).send('OK'));
+app.get('/api/healthz', (_req, res) => res.status(200).json({ status: 'ok', service: 'countdown-maker' }));
 
 // Static file hosting with native HTTP 206 Partial Content (Byte-Range) streaming for MP4 videos
 app.use(
@@ -578,10 +586,19 @@ async function getAdcCredentials(): Promise<{ token: string; project: string; ac
 
   let token = '';
   let project = 'aosterloh-cs-muc';
-  let account = 'aosterloh@cloudspace.goog';
+  let account = 'aosterloh@google.com';
 
   try {
-    account = execSync('gcloud config get-value account', { encoding: 'utf8', env }).trim() || account;
+    const configuredAccount = execSync('gcloud config get-value account', { encoding: 'utf8', env }).trim();
+    if (configuredAccount && isDomainAllowed(configuredAccount)) {
+      account = configuredAccount;
+    } else {
+      const authList = execSync('gcloud auth list --format="value(account)"', { encoding: 'utf8', env });
+      const googleAccount = authList.split('\n').map((a) => a.trim()).find((a) => isDomainAllowed(a));
+      if (googleAccount) {
+        account = googleAccount;
+      }
+    }
   } catch (e) {}
 
   try {
@@ -595,46 +612,153 @@ async function getAdcCredentials(): Promise<{ token: string; project: string; ac
   return { token, project, account };
 }
 
-// Google OAuth2 Multi-Domain Verification Helper (@cloudspace.goog & @google.com)
-const ALLOWED_DOMAINS = ['cloudspace.goog', 'google.com'];
+// Google OAuth2 Domain Verification Helper (Strictly @google.com corporate accounts)
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const oauthClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+const ALLOWED_DOMAINS = ['google.com'];
 
-function isDomainAllowed(email?: string, hd?: string): boolean {
-  if (hd && ALLOWED_DOMAINS.includes(hd)) return true;
-  if (email && ALLOWED_DOMAINS.some((d) => email.toLowerCase().endsWith(`@${d}`))) return true;
+export function isDomainAllowed(email?: string, hd?: string): boolean {
+  const cleanEmail = (email || '').toLowerCase().trim();
+  const cleanHd = (hd || '').toLowerCase().trim();
+  if (cleanHd === 'google.com') return true;
+  if (cleanEmail.endsWith('@google.com')) return true;
   return false;
 }
 
-async function verifyGoogleToken(token: string): Promise<{ valid: boolean; email?: string; name?: string; picture?: string; error?: string }> {
-  try {
-    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${token}`);
-    if (!res.ok) {
-      const errText = await res.text();
-      return { valid: false, error: `Invalid Google token: ${errText}` };
-    }
-    const data = await res.json();
-    const email = data.email || '';
-    const hd = data.hd || '';
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || "AIzaSyBDfu44ElID27cy2lvozY2BD1izTq7AIuo";
 
-    if (!isDomainAllowed(email, hd)) {
+// In-memory cache for validated tokens to minimize latency and avoid repeated API round-trips
+const tokenVerificationCache = new Map<string, { email: string; name: string; picture?: string; expiresAt: number }>();
+
+export function parseJwtPayload(token: string): any {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = Buffer.from(base64, 'base64').toString('utf8');
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+export async function verifyGoogleToken(token: string): Promise<{ valid: boolean; email?: string; name?: string; picture?: string; error?: string }> {
+  try {
+    // 1. Check in-memory verification cache first
+    const cached = tokenVerificationCache.get(token);
+    if (cached && cached.expiresAt > Date.now()) {
+      return {
+        valid: true,
+        email: cached.email,
+        name: cached.name,
+        picture: cached.picture,
+      };
+    }
+
+    const unverifiedPayload = parseJwtPayload(token);
+    const isFirebaseToken =
+      unverifiedPayload?.iss?.includes('securetoken.google.com') ||
+      unverifiedPayload?.aud === 'aosterloh-cs-muc' ||
+      unverifiedPayload?.firebase !== undefined;
+
+    let email = '';
+    let name = '';
+    let picture: string | undefined = undefined;
+    let isVerified = false;
+
+    if (isFirebaseToken) {
+      // 2. Verify Firebase Auth ID token via Google Identity Toolkit
+      const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken: token }),
+      });
+
+      if (!res.ok) {
+        const errJson: any = await res.json().catch(() => ({}));
+        const errMsg = errJson?.error?.message || res.statusText;
+        return { valid: false, error: `Invalid Firebase authentication token: ${errMsg}` };
+      }
+
+      const data: any = await res.json();
+      const user = data?.users?.[0];
+      if (!user) {
+        return { valid: false, error: 'User record not found for provided token.' };
+      }
+
+      email = (user.email || '').toLowerCase().trim();
+      name = user.displayName || email.split('@')[0];
+      picture = user.photoUrl;
+      isVerified = user.emailVerified === true || String(user.emailVerified) === 'true';
+    } else {
+      // 3. Fallback: Verify legacy Google OAuth2 ID token
+      let payload: any = null;
+      try {
+        const ticket = await oauthClient.verifyIdToken({
+          idToken: token,
+          audience: GOOGLE_CLIENT_ID || undefined,
+        });
+        payload = ticket.getPayload();
+      } catch (localVerifyErr: any) {
+        const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(token)}`);
+        if (!res.ok) {
+          const errText = await res.text();
+          return { valid: false, error: `Invalid Google token: ${errText}` };
+        }
+        payload = await res.json();
+      }
+
+      if (!payload) {
+        return { valid: false, error: 'Empty token payload from Google authentication.' };
+      }
+
+      email = (payload.email || '').toLowerCase().trim();
+      const hd = (payload.hd || '').toLowerCase().trim();
+      name = payload.name || email.split('@')[0];
+      picture = payload.picture;
+      isVerified = payload.email_verified === true || payload.email_verified === 'true';
+
+      if (!isDomainAllowed(email, hd)) {
+        return {
+          valid: false,
+          email,
+          error: `Access Denied: Account '${email}' does not belong to authorized corporate domain (@google.com).`,
+        };
+      }
+    }
+
+    if (!isVerified) {
+      return { valid: false, error: 'Access Denied: Google email is not verified.' };
+    }
+
+    if (!isDomainAllowed(email)) {
       return {
         valid: false,
         email,
-        error: `Access Denied: Account '${email}' does not belong to authorized domains (${ALLOWED_DOMAINS.join(', ')}).`,
+        error: `Access Denied: Account '${email}' does not belong to authorized corporate domain (@google.com).`,
       };
     }
+
+    // Cache valid token for 5 minutes (or until token expiry)
+    const expMs = unverifiedPayload?.exp ? unverifiedPayload.exp * 1000 : Date.now() + 5 * 60 * 1000;
+    const cacheTtlMs = Math.min(expMs, Date.now() + 5 * 60 * 1000);
+    tokenVerificationCache.set(token, {
+      email,
+      name,
+      picture,
+      expiresAt: cacheTtlMs,
+    });
 
     return {
       valid: true,
       email,
-      name: data.name || email.split('@')[0],
-      picture: data.picture,
+      name,
+      picture,
     };
   } catch (err: any) {
     return { valid: false, error: err.message };
   }
 }
-
-const APP_PASSWORD = process.env.APP_PASSWORD || '';
 
 // Google OAuth2 Authentication Endpoint
 app.post('/api/auth/google', async (req, res) => {
@@ -678,37 +802,6 @@ app.get('/api/auth/config', (_req, res) => {
   });
 });
 
-// 1. Password-Based Corporate Authentication Endpoint (Fail-Safe Fallback)
-app.post('/api/auth/password', (req, res) => {
-  try {
-    const { password } = req.body;
-
-    if (!password) {
-      return res.status(400).json({ success: false, error: 'Password is required' });
-    }
-
-    if (!APP_PASSWORD || password.trim() === APP_PASSWORD.trim()) {
-      addLog('SUCCESS', 'ADC_AUTH', 'Authenticated session via application password');
-      return res.json({
-        success: true,
-        user: {
-          email: '',
-          name: 'Google User',
-          ldap: '',
-        },
-      });
-    }
-
-    addLog('WARN', 'ADC_AUTH', 'Blocked login attempt: incorrect password');
-    return res.status(401).json({
-      success: false,
-      error: 'Incorrect password. Please enter the valid corporate password.',
-    });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
 // Helper: Extract & validate authenticated identity from Identity-Aware Proxy (IAP) headers
 function getIapUser(req: express.Request): { email: string; ldap: string; name: string } | null {
   const iapHeader = req.header('x-goog-authenticated-user-email');
@@ -745,7 +838,7 @@ app.get('/api/auth/me', async (req, res) => {
   });
 });
 
-// Domain Lock Protection Middleware for Generation Endpoints
+// Corporate Domain Lock Protection Middleware for Generation Endpoints
 async function requireCloudspaceDomain(req: express.Request, res: express.Response, next: express.NextFunction) {
   // 1. Check Identity-Aware Proxy (IAP) header first
   const iapUser = getIapUser(req);
@@ -754,33 +847,61 @@ async function requireCloudspaceDomain(req: express.Request, res: express.Respon
       addLog('WARN', 'ADC_AUTH', `Blocked non-domain request from IAP: ${iapUser.email}`);
       return res.status(403).json({ success: false, error: `Domain not authorized: ${iapUser.email}` });
     }
+    (req as any).user = iapUser;
     return next();
   }
 
-  // 2. Check Bearer token (GIS / OAuth)
+  // 2. Check Bearer token (GIS / OAuth / Firebase)
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
 
   if (token && token.length > 50) {
     const verifyResult = await verifyGoogleToken(token);
-    if (!verifyResult.valid) {
-      addLog('WARN', 'ADC_AUTH', `Blocked non-domain request: ${verifyResult.error}`);
-      return res.status(403).json({ success: false, error: verifyResult.error });
+    if (verifyResult.valid) {
+      (req as any).user = verifyResult;
+      return next();
     }
+
+    // On localhost, if token is expired/invalid, seamlessly fall back to local Google ADC account
+    const isLocalhost =
+      req.hostname === 'localhost' ||
+      req.hostname === '127.0.0.1' ||
+      Boolean(req.headers.host?.includes('localhost')) ||
+      Boolean(req.headers.host?.includes('127.0.0.1'));
+
+    if (isLocalhost) {
+      const creds = await getAdcCredentials();
+      if (creds.account && isDomainAllowed(creds.account)) {
+        addLog('INFO', 'ADC_AUTH', `Localhost fallback: verified session using local ADC account ${creds.account}`);
+        (req as any).user = {
+          email: creds.account,
+          ldap: creds.account.split('@')[0],
+          name: creds.account.split('@')[0],
+        };
+        return next();
+      }
+    }
+
+    addLog('WARN', 'ADC_AUTH', `Blocked unauthorized token: ${verifyResult.error}`);
+    return res.status(401).json({ success: false, error: verifyResult.error });
+  }
+
+  // 3. Fallback check for local development: active server ADC account
+  const creds = await getAdcCredentials();
+  if (creds.account && isDomainAllowed(creds.account)) {
+    (req as any).user = {
+      email: creds.account,
+      ldap: creds.account.split('@')[0],
+      name: creds.account.split('@')[0],
+    };
     return next();
   }
 
-  // 3. Check active server ADC account
-  const creds = await getAdcCredentials();
-  if (creds.account && !isDomainAllowed(creds.account)) {
-    addLog('WARN', 'ADC_AUTH', `Blocked server execution: Account ${creds.account} is not in authorized domains (${ALLOWED_DOMAINS.join(', ')})`);
-    return res.status(403).json({
-      success: false,
-      error: `Access Denied: Server environment account ${creds.account} not authorized. Must be @${ALLOWED_DOMAINS.join(' or @')}.`,
-    });
-  }
-
-  next();
+  addLog('WARN', 'ADC_AUTH', 'Blocked unauthenticated request: missing or invalid @google.com authorization');
+  return res.status(401).json({
+    success: false,
+    error: 'Unauthorized: Access restricted to @google.com corporate accounts. Please sign in.',
+  });
 }
 
 // Logs API Endpoint
@@ -844,6 +965,7 @@ app.post('/api/jobs', requireCloudspaceDomain, async (req, res) => {
   try {
     const {
       customerName = 'Project',
+      companyUrl = '',
       creatorLdap = '',
       creativeTheme = '',
       styleModifiers = '',
@@ -862,6 +984,7 @@ app.post('/api/jobs', requireCloudspaceDomain, async (req, res) => {
     const jobState: StoredJobState = {
       jobId,
       customerName: versionedCustomerName,
+      companyUrl: companyUrl || undefined,
       creatorLdap: creatorLdap || undefined,
       creativeTheme,
       styleModifiers,
@@ -912,6 +1035,15 @@ app.put('/api/jobs/:jobId', requireCloudspaceDomain, async (req, res) => {
       updatedAt: new Date().toISOString(),
       createdAt: existing.createdAt || new Date().toISOString(),
     };
+
+    // Explicitly purge invalidated master cuts and metrics from persistent GCS state
+    if (req.body.masterVideoUri === null) delete (updatedState as any).masterVideoUri;
+    if (req.body.master720pUri === null) delete (updatedState as any).master720pUri;
+    if (req.body.master4kUri === null) delete (updatedState as any).master4kUri;
+    if (req.body.extendedMasterVideoUri === null) delete (updatedState as any).extendedMasterVideoUri;
+    if (req.body.extended720pUri === null) delete (updatedState as any).extended720pUri;
+    if (req.body.extended4kUri === null) delete (updatedState as any).extended4kUri;
+    if (req.body.renderMetrics === null) delete (updatedState as any).renderMetrics;
 
     await saveJobStateToGcs(updatedState);
     res.json({ success: true, job: updatedState });
@@ -1010,9 +1142,11 @@ app.get('/api/jobs/:jobId/assets/:subfolder/:filename', async (req, res) => {
         const stream = fs.createReadStream(targetPath, { start, end });
         return stream.pipe(res);
       } else {
-        // When requested without a Range header by a video tag, serve the initial 8MB chunk as 206
-        // so media players can immediately buffer and start playback without hitting the 32MB limit.
-        if (fileSize > CHUNK_SIZE) {
+        // When requested without a Range header:
+        // If sec-fetch-dest is 'video', the browser's video element is making an initial probe.
+        // Serve the initial 8MB chunk as 206 so media players can immediately buffer and start playback without hitting the 32MB limit.
+        const isVideoTagProbe = req.headers['sec-fetch-dest'] === 'video';
+        if (isVideoTagProbe && fileSize > CHUNK_SIZE) {
           const end = CHUNK_SIZE - 1;
           res.writeHead(206, {
             'Content-Range': `bytes 0-${end}/${fileSize}`,
@@ -1024,8 +1158,15 @@ app.get('/api/jobs/:jobId/assets/:subfolder/:filename', async (req, res) => {
           const stream = fs.createReadStream(targetPath, { start: 0, end });
           return stream.pipe(res);
         } else {
-          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-          return res.sendFile(targetPath);
+          // If not an embedded video element probe (e.g. browser download, direct navigation, or file <= 8MB),
+          // stream the entire file via chunked transfer encoding (omitting Content-Length so Cloud Run never hits 32MB limit).
+          res.writeHead(200, {
+            'Content-Type': 'video/mp4',
+            'Content-Disposition': `attachment; filename="${filename}"`,
+            'Cache-Control': 'public, max-age=31536000, immutable',
+          });
+          const stream = fs.createReadStream(targetPath);
+          return stream.pipe(res);
         }
       }
     }
@@ -1064,6 +1205,17 @@ export function validateAndNormalizeUrl(inputUrl: string): { isValid: boolean; n
 }
 
 // 0. Auto-Research 10 Domain-Authentic Visual Ideas via Company URL (Gemini 3.8 Flash + Google Search Grounding)
+export function formatVisualIdeasWithNewlines(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/(?:^|\n)\s*(\d{1,2}\.|\#\d{1,2}\b|(?:Numeral|Shot|Scene)\s*"?\d{1,2}"?:?)/gi, (match, prefix, offset) => {
+      return (offset === 0 ? '' : '\n\n') + prefix;
+    })
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 app.post('/api/suggest-brand-ideas', requireCloudspaceDomain, async (req, res) => {
   try {
     const { companyUrl, brandName, apiKey } = req.body;
@@ -1083,7 +1235,7 @@ app.post('/api/suggest-brand-ideas', requireCloudspaceDomain, async (req, res) =
 
     const key = apiKey || process.env.GEMINI_API_KEY;
 
-    addLog('INFO', 'GEMINI_AI', `Researching domain "${normalizedUrl}" via Gemini 3.8 Flash with Google Search Grounding...`);
+    addLog('INFO', 'GEMINI_AI', `Researching domain "${normalizedUrl}" via Gemini 4 Argon with Google Search Grounding...`);
 
     const promptText = `You are an elite brand creative director and visual film scout specializing in cutting-edge cinematography for Google Veo 3.1.
 You are given the official corporate website URL: "${normalizedUrl}".
@@ -1100,24 +1252,33 @@ CRITICAL ANTI-CONFUSION RULE: Focus strictly and exclusively on what this specif
 - Strictly Banned: Low-contrast laser etchings, monochrome metal stamps, floating 2D digital overlays, synthetic HUD graphics, post-production CGI watermarks, artificial graphic overlays.
 - Authentic Environments: Strictly isolate the visual language to this organization's actual facilities, machinery, workflows, and locations discovered during search grounding. Do not inject external props or generic industrial clichés.
 
-Provide your output strictly in this structured format:
+Provide your output strictly in this structured format with an empty blank line after each numbered scene:
 COMPANY_NAME: [Official Company Name]
 BUSINESS_SUMMARY: [1-2 sentences summarizing their core business and industry domain]
 SCENES:
 1. Numeral "10": [Visual substrate and authentic scene description]
+
 2. Numeral "9": [Visual substrate and authentic scene description]
+
 3. Numeral "8": [Visual substrate and authentic scene description]
+
 4. Numeral "7": [Visual substrate and authentic scene description]
+
 5. Numeral "6": [Visual substrate and authentic scene description]
+
 6. Numeral "5": [Visual substrate and authentic scene description]
+
 7. Numeral "4": [Visual substrate and authentic scene description]
+
 8. Numeral "3": [Visual substrate and authentic scene description]
+
 9. Numeral "2": [Visual substrate and authentic scene description]
+
 10. Numeral "1": [Visual substrate and authentic scene description]
 `;
 
     if (key) {
-      const candidateModels = ['gemini-3.8-flash', 'gemini-3.7-flash'];
+      const candidateModels = ['gemini-4-argon', 'gemini-3.8-flash', 'gemini-3.7-flash'];
       for (const m of candidateModels) {
         try {
           const geminiRes = await fetch(
@@ -1153,6 +1314,9 @@ SCENES:
                 visualIdeas = scenesMatch[1].trim();
               }
 
+              // Normalize visual ideas to ensure clean blank lines between each scene
+              visualIdeas = formatVisualIdeasWithNewlines(visualIdeas);
+
               const fallbackBrand = hostname.replace(/^www\./, '').split('.')[0];
               const brandDisplayName = detectedBrand || fallbackBrand.toUpperCase();
 
@@ -1179,14 +1343,23 @@ SCENES:
     // Fallback if API key unavailable
     const fallbackBrand = hostname.replace(/^www\./, '').split('.')[0].toUpperCase();
     const fallbackIdeas = `1. Numeral "10": High-visibility contrasting stencil on primary structural casing for ${fallbackBrand}
+
 2. Numeral "9": Illuminated digital segment readout on central hardware control station
+
 3. Numeral "8": Dimensional machined metal numerals mounted on architectural facility panel
+
 4. Numeral "7": High-contrast opaque stencil on technical equipment housing
+
 5. Numeral "6": High-luminance backlit physical display on operational telemetry rack
+
 6. Numeral "5": Raised physical numeral mounted on primary workstation console
+
 7. Numeral "4": Contrasting painted stencil lettering on equipment exterior
+
 8. Numeral "3": Glowing numeric indicator on calibration diagnostic unit
+
 9. Numeral "2": Crisp high-contrast typography prominently displayed on primary operational surface
+
 10. Numeral "1": Large hero numeral centered under directional key lighting in core facility`;
 
     return res.json({
@@ -1204,6 +1377,301 @@ SCENES:
   }
 });
 
+// Helper: Synthesize Image with Nano Banana 2 (Gemini 3.1 Flash Image / 2.5 Flash Image)
+async function synthesizeNanoBananaImage(
+  prompt: string,
+  apiKey?: string,
+  options?: {
+    aspectRatio?: '32:9' | '16:9' | '1:1';
+    upscaleTo4k32x9?: boolean;
+    jobId?: string;
+    filenamePrefix?: string;
+  }
+): Promise<{ success: boolean; imageUri?: string; model?: string; error?: string }> {
+  const apiKeys = getGeminiApiKeys(apiKey);
+  const models = ['gemini-nano-banana-2.1', 'gemini-3.1-flash-image', 'gemini-2.5-flash-image'];
+  const prefix = options?.filenamePrefix || 'asset';
+  const jobId = options?.jobId || 'global';
+  const aspectRatio = options?.aspectRatio || '16:9';
+
+  let enhancedPrompt = prompt;
+  if (aspectRatio === '32:9') {
+    enhancedPrompt = `${prompt} Ultra-wide panoramic 32:9 ratio aspect ratio 32:9 cinema wallpaper, wide angle panoramic photography, razor-sharp 4K cinematic quality, 32:9 screen format, 3840x1080 resolution, wide expansive composition.`;
+  }
+
+  for (let keyIdx = 0; keyIdx < apiKeys.length; keyIdx++) {
+    const k = apiKeys[keyIdx];
+    for (const m of models) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${k}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: enhancedPrompt }] }],
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const candidateParts = data.candidates?.[0]?.content?.parts || [];
+          for (const part of candidateParts) {
+            if (part.inlineData?.data) {
+              const buffer = Buffer.from(part.inlineData.data, 'base64');
+              const rawFilename = `${prefix}_raw_${Date.now()}.png`;
+              const rawPath = path.join(OUTPUT_DIR, rawFilename);
+              fs.writeFileSync(rawPath, buffer);
+
+              const finalFilename = `${prefix}_${Date.now()}.png`;
+              const finalPath = path.join(OUTPUT_DIR, finalFilename);
+
+              if (options?.upscaleTo4k32x9 || aspectRatio === '32:9') {
+                try {
+                  const { execSync } = await import('child_process');
+                  execSync(
+                    `ffmpeg -y -i "${rawPath}" -vf "scale=3840:1080:force_original_aspect_ratio=increase,crop=3840:1080" "${finalPath}"`,
+                    { stdio: 'pipe' }
+                  );
+                } catch (ffmpegErr: any) {
+                  console.warn('[NANO_BANANA_FFMPEG_RESIZE] ffmpeg resize fallback:', ffmpegErr.message);
+                  fs.copyFileSync(rawPath, finalPath);
+                }
+              } else {
+                fs.copyFileSync(rawPath, finalPath);
+              }
+
+              let finalUri = `/output/${finalFilename}`;
+              try {
+                finalUri = await uploadAssetToGcs(jobId, finalPath, 'images', finalFilename);
+              } catch (gcsErr: any) {
+                console.warn(`[GCS_UPLOAD] Failed to upload ${finalFilename} to GCS:`, gcsErr.message);
+              }
+
+              return {
+                success: true,
+                imageUri: finalUri,
+                model: m,
+              };
+            }
+          }
+        } else {
+          if (res.status === 429) {
+            markKeyAsExhausted(k);
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[NANO_BANANA_IMAGE] Model ${m} error:`, err.message);
+      }
+    }
+  }
+
+  return {
+    success: false,
+    error: 'Failed to generate image with Nano Banana 2 (all API keys exhausted).',
+  };
+}
+
+// Customer Meeting Package: Analyze Brand & Extract Prompts (Gemini 3.8 Flash with Search Grounding)
+app.post('/api/customer-meeting-package/analyze', requireCloudspaceDomain, async (req, res) => {
+  try {
+    const { companyUrl, brandName, apiKey } = req.body;
+    const input = (companyUrl || brandName || '').trim();
+    if (!input) {
+      return res.status(400).json({ error: 'Customer website URL or brand name is required.' });
+    }
+
+    const validation = validateAndNormalizeUrl(input);
+    const normalizedUrl = validation.isValid ? validation.normalizedUrl! : input;
+    const hostname = validation.isValid ? validation.hostname! : input;
+
+    const apiKeys = getGeminiApiKeys(apiKey);
+    const key = apiKeys[0] || process.env.GEMINI_API_KEY;
+
+    addLog('INFO', 'GEMINI_AI', `Analyzing customer URL "${normalizedUrl}" for executive meeting package via Gemini 4 Argon...`);
+
+    const promptText = `You are an elite creative director preparing an executive customer meeting presentation.
+The customer's website URL is: "${normalizedUrl}".
+
+Perform Google Search Grounding to research:
+1. Official Customer / Brand Name.
+2. Industry & Core Domain (e.g. Commercial Aviation, Precision Agriculture, Electric Automotive, FinTech & Payments, Biotech & Healthcare, Renewable Energy).
+3. Primary signature machinery, equipment, flagship vehicles, technical facilities, or operational landscape.
+4. Logo & Visual Branding (official logo shape, emblem, colors, symbol).
+5. Appropriate worker role & attire (e.g. airline pilot in uniform cap for Lufthansa, modern farmer in straw hat for Wimex, cleanroom engineer with safety visor for semiconductor, etc.).
+
+We need two image prompts:
+A. 32:9 CINEMA WELCOME WALLPAPER PROMPT:
+Modeled after executive cinema display blueprints (e.g. Lufthansa Boeing 747 on rain-slicked runway at dusk, Wimex combine harvester at sunset in vast golden fields):
+- Ultra-wide panoramic 32:9 aspect ratio cinema welcome wallpaper
+- Dramatic warm golden hour sunset or dusk lighting with sun flare and atmospheric horizon
+- Prominent focus on the client's signature machinery, vehicles, or flagship technical environment
+- Cinematic 65mm anamorphic wide-angle lens, clean scenic composition without any text, logos, or watermarks, 4k ultra-high resolution
+- 32:9 aspect ratio
+
+B. BUGDROID MASCOT PROMPT:
+- Cute 3D Android Bugdroid character standing centered on a solid pure black background (#000000)
+- Dressed as an authentic worker of that company (e.g. airline pilot hat and jacket, farmer hat, technical gear matching their industry)
+- Wearing a clean crisp white t-shirt with the official customer logo printed crisply in the center of the chest
+- High resolution 3D digital character art, Pixar-quality studio lighting, sharp details, centered 1:1 square composition
+
+Respond strictly in this structured format:
+COMPANY_NAME: [Official Company Name]
+INDUSTRY: [Industry Category]
+BUSINESS_SUMMARY: [1-2 sentences on what they do]
+LOGO_DESCRIPTION: [Colors, shape, and emblem of their logo]
+CINEMA_WALLPAPER_PROMPT: [The complete detailed 32:9 wallpaper prompt]
+BUGDROID_MASCOT_PROMPT: [The complete detailed Bugdroid mascot prompt]
+`;
+
+    let detectedBrand = '';
+    let industry = '';
+    let businessSummary = '';
+    let logoDescription = '';
+    let cinemaWallpaperPrompt = '';
+    let bugdroidMascotPrompt = '';
+
+    if (key) {
+      const candidateModels = ['gemini-4-argon', 'gemini-3.8-flash', 'gemini-3.7-flash'];
+      for (const m of candidateModels) {
+        try {
+          const geminiRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: promptText }] }],
+                generationConfig: { temperature: 0.7 },
+                tools: [{ googleSearch: {} }],
+              }),
+            }
+          );
+
+          if (geminiRes.ok) {
+            const data = await geminiRes.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            if (text) {
+              const nameMatch = text.match(/COMPANY_NAME:\s*(.+)/i);
+              if (nameMatch) detectedBrand = nameMatch[1].trim();
+
+              const indMatch = text.match(/INDUSTRY:\s*(.+)/i);
+              if (indMatch) industry = indMatch[1].trim();
+
+              const sumMatch = text.match(/BUSINESS_SUMMARY:\s*(.+)/i);
+              if (sumMatch) businessSummary = sumMatch[1].trim();
+
+              const logoMatch = text.match(/LOGO_DESCRIPTION:\s*(.+)/i);
+              if (logoMatch) logoDescription = logoMatch[1].trim();
+
+              const wallMatch = text.match(/CINEMA_WALLPAPER_PROMPT:\s*([\s\S]+?)(?=BUGDROID_MASCOT_PROMPT:|$)/i);
+              if (wallMatch) cinemaWallpaperPrompt = wallMatch[1].trim();
+
+              const bugMatch = text.match(/BUGDROID_MASCOT_PROMPT:\s*([\s\S]+)/i);
+              if (bugMatch) bugdroidMascotPrompt = bugMatch[1].trim();
+              break;
+            }
+          }
+        } catch (e: any) {
+          console.warn('[MEETING_PACKAGE_ANALYZE] Gemini error:', e.message);
+        }
+      }
+    }
+
+    const fallbackBrand = hostname.replace(/^www\./, '').split('.')[0];
+    const finalBrand = brandName?.trim() || detectedBrand || (fallbackBrand.charAt(0).toUpperCase() + fallbackBrand.slice(1));
+    const finalIndustry = industry || 'Enterprise Technology';
+
+    if (!cinemaWallpaperPrompt) {
+      cinemaWallpaperPrompt = `Ultra-wide panoramic 32:9 cinema welcome wallpaper for ${finalBrand} in ${finalIndustry}, panoramic wide angle landscape at golden hour sunset, dramatic warm sun flare, cinematic lighting, shot on 65mm anamorphic lens, 4k ultra-high resolution, clean expansive composition without text, 32:9 aspect ratio.`;
+    }
+
+    if (!bugdroidMascotPrompt) {
+      bugdroidMascotPrompt = `A 3D render of a cute Android Bugdroid character standing centered on a solid pure black background (#000000). The Bugdroid is dressed as a worker in the ${finalIndustry} industry and wearing a clean crisp white t-shirt with the official ${finalBrand} logo printed crisply in the center of the chest. High resolution 3D digital art, Pixar-quality studio lighting, sharp details, centered composition.`;
+    }
+
+    return res.json({
+      success: true,
+      brandName: finalBrand,
+      industry: finalIndustry,
+      businessSummary: businessSummary || `Official website: ${normalizedUrl}`,
+      logoDescription,
+      cinemaWallpaperPrompt,
+      bugdroidMascotPrompt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Customer Meeting Package: Generate 32:9 Cinema Wallpaper
+app.post('/api/customer-meeting-package/generate-cinema-wallpaper', requireCloudspaceDomain, async (req, res) => {
+  try {
+    const { prompt, brandName = 'Client', companyUrl, apiKey, jobId = 'global' } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt is required for cinema wallpaper generation.' });
+    }
+
+    const safeBrand = (brandName || 'client').toLowerCase().replace(/[^a-z0-9]/g, '_');
+    addLog('INFO', 'GEMINI_AI', `Synthesizing 4K 32:9 Cinema Wallpaper for ${brandName} with Nano Banana 2...`);
+
+    const result = await synthesizeNanoBananaImage(prompt, apiKey, {
+      aspectRatio: '32:9',
+      upscaleTo4k32x9: true,
+      jobId,
+      filenamePrefix: `wallpaper_${safeBrand}`,
+    });
+
+    if (!result.success || !result.imageUri) {
+      addLog('ERROR', 'GEMINI_AI', `Cinema wallpaper synthesis failed: ${result.error}`);
+      return res.status(500).json({ success: false, error: result.error });
+    }
+
+    addLog('SUCCESS', 'GEMINI_AI', `4K 32:9 Cinema Wallpaper ready for ${brandName} (3840x1080)`);
+    return res.json({
+      success: true,
+      wallpaperUri: result.imageUri,
+      model: result.model,
+      promptUsed: prompt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Customer Meeting Package: Generate Cute Bugdroid Mascot
+app.post('/api/customer-meeting-package/generate-bugdroid-mascot', requireCloudspaceDomain, async (req, res) => {
+  try {
+    const { prompt, brandName = 'Client', companyUrl, apiKey, jobId = 'global' } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt is required for Bugdroid mascot generation.' });
+    }
+
+    const safeBrand = (brandName || 'client').toLowerCase().replace(/[^a-z0-9]/g, '_');
+    addLog('INFO', 'GEMINI_AI', `Rendering cute Bugdroid Mascot on black for ${brandName} with Nano Banana 2...`);
+
+    const result = await synthesizeNanoBananaImage(prompt, apiKey, {
+      aspectRatio: '1:1',
+      jobId,
+      filenamePrefix: `bugdroid_${safeBrand}`,
+    });
+
+    if (!result.success || !result.imageUri) {
+      addLog('ERROR', 'GEMINI_AI', `Bugdroid mascot rendering failed: ${result.error}`);
+      return res.status(500).json({ success: false, error: result.error });
+    }
+
+    addLog('SUCCESS', 'GEMINI_AI', `Cute Bugdroid Mascot ready for ${brandName}`);
+    return res.json({
+      success: true,
+      bugdroidUri: result.imageUri,
+      model: result.model,
+      promptUsed: prompt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 1. Generate Diegetic Prompts (Gemini 3.8 Flash with 3.7 Flash fallback via API Key or ADC)
 app.post('/api/generate-diegetic-prompts', requireCloudspaceDomain, async (req, res) => {
   try {
@@ -1214,7 +1682,7 @@ app.post('/api/generate-diegetic-prompts', requireCloudspaceDomain, async (req, 
     const isCustom = typeof customPromptRules === 'string' && customPromptRules.trim().length > 0;
     const rules = isCustom ? customPromptRules.trim() : getVeoPromptRules();
 
-    addLog('INFO', 'GEMINI_AI', `Generating Diegetic Prompts with reveal strategy for brand "${brandName}"${companyUrl ? ` (${companyUrl})` : ''} using ${isCustom ? 'User Custom Prompt Guide' : 'Default veo-prompt-guide.md'} via Gemini 3.8 Flash...`);
+    addLog('INFO', 'GEMINI_AI', `Generating Diegetic Prompts with reveal strategy for brand "${brandName}"${companyUrl ? ` (${companyUrl})` : ''} using ${isCustom ? 'User Custom Prompt Guide' : 'Default veo-prompt-guide.md'} via Gemini 4 Argon...`);
 
     const userIdeasSection = themeContext && themeContext.trim().length > 0
       ? `\n🚨 TOP PRIORITY VISUAL BLUEPRINT FROM USER (NON-NEGOTIABLE):\n"${themeContext.trim()}"\nYou MUST extract every specialized machine, technical facility, material, security mechanism, and operational process mentioned in these ideas and feature them prominently across the 10 scenes.\n`
@@ -1256,6 +1724,7 @@ Return ONLY a valid JSON array of 10 objects:
     // Attempt 1: Via Google AI Studio Gemini API with Google Search Grounding (Gemini 3.8 Flash with Key Pool failover)
     if (apiKeys.length > 0) {
       const candidateModels = [
+        'gemini-4-argon',
         'gemini-3.8-flash',
         'gemini-3.7-flash',
       ];
@@ -1531,6 +2000,7 @@ Return ONLY a single valid JSON object:
 
     if (key) {
       const candidateModels = [
+        'gemini-4-argon',
         'gemini-3.8-flash',
         'gemini-3.7-flash',
       ];
@@ -1680,6 +2150,7 @@ Return ONLY a single valid JSON object:
 
     if (key) {
       const candidateModels = [
+        'gemini-4-argon',
         'gemini-3.8-flash',
         'gemini-3.7-flash',
       ];
@@ -1761,7 +2232,7 @@ async function synthesizeImageWithGoogleAI(
 
   // If dual images are supplied, prioritize Gemini Multimodal (Nano Banana 2-Image Ingestion)
   if (opts.image1Base64 && opts.image2Base64 && key) {
-    const multimodalModels = ['gemini-2.5-flash-image', 'gemini-2.0-flash-exp', 'gemini-3.1-flash-image'];
+    const multimodalModels = ['gemini-nano-banana-2.1', 'gemini-3.1-flash-image', 'gemini-2.5-flash-image'];
     const parts = [
       {
         text: `You are an expert VFX and generative image editor.
@@ -1859,7 +2330,7 @@ Execute the replacement seamlessly, preserving exact environmental lighting, sha
     }
 
     // Try Gemini Multimodal Image Generation
-    const geminiModels = ['gemini-2.0-flash-exp', 'gemini-2.5-flash-image', 'gemini-3.1-flash-image'];
+    const geminiModels = ['gemini-nano-banana-2.1', 'gemini-3.1-flash-image', 'gemini-2.5-flash-image'];
     for (const m of geminiModels) {
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key}`;
@@ -2948,6 +3419,7 @@ app.post('/api/process-temporal-video', requireCloudspaceDomain, async (req, res
 
 // 6. Master Export (Concat available slots + Dual 4K Upscale Engines + 30s Audio Track Mix)
 app.post('/api/export-master', requireCloudspaceDomain, async (req, res) => {
+  const renderStartTime = Date.now();
   try {
     const {
       slotsConfig,
@@ -3053,13 +3525,26 @@ app.post('/api/export-master', requireCloudspaceDomain, async (req, res) => {
       await execFFmpeg(ffmpegArgs);
     }
 
+    const renderDurationSeconds = Math.max(1, Math.round((Date.now() - renderStartTime) / 1000));
+    const profileKey = is4K ? 'countdown_30s_4k' : 'countdown_30s_720p';
+    try {
+      await recordRenderBenchmark(profileKey, renderDurationSeconds);
+    } catch (benchErr: any) {
+      console.warn(`[BENCHMARKS] Failed to record benchmark for ${profileKey}:`, benchErr.message);
+    }
+
     let finalMasterUri = `/output/${outputFilename}`;
     try {
       finalMasterUri = await uploadAssetToGcs(jobId, masterOutputPath, 'master', outputFilename);
-      // Immediately persist master video reference to GCS job state
+      // Immediately persist master video reference and renderMetrics to GCS job state
       if (jobId) {
         const currentJob = await loadJobStateFromGcs(jobId);
         if (currentJob) {
+          const updatedMetrics: RenderMetrics = {
+            ...(currentJob.renderMetrics || {}),
+            [is4K ? 'master4kRenderSeconds' : 'master720pRenderSeconds']: renderDurationSeconds,
+            lastUpdated: new Date().toISOString(),
+          };
           await saveJobStateToGcs({
             ...currentJob,
             masterVideoUri: finalMasterUri,
@@ -3069,6 +3554,7 @@ app.post('/api/export-master', requireCloudspaceDomain, async (req, res) => {
             extendedMasterVideoUri: is4K ? currentJob.extended720pUri : currentJob.extended4kUri,
             extended720pUri: !is4K ? undefined : currentJob.extended720pUri,
             extended4kUri: is4K ? undefined : currentJob.extended4kUri,
+            renderMetrics: updatedMetrics,
           });
         }
       }
@@ -3079,7 +3565,7 @@ app.post('/api/export-master', requireCloudspaceDomain, async (req, res) => {
     addLog(
       'SUCCESS',
       'FFMPEG',
-      `Countdown Video (${availableSlots.length}/10 shots, engine: ${effectiveEngine}) exported successfully: ${outputFilename}`
+      `Countdown Video (${availableSlots.length}/10 shots, engine: ${effectiveEngine}) exported successfully in ${renderDurationSeconds}s: ${outputFilename}`
     );
     return res.json({
       success: true,
@@ -3090,6 +3576,8 @@ app.post('/api/export-master', requireCloudspaceDomain, async (req, res) => {
       totalDuration: 30.0,
       qualityMode: is4K ? 'FULL_4K' : 'FAST_720P',
       upscaleEngine: effectiveEngine,
+      renderDurationSeconds,
+      renderProfile: profileKey,
     });
   } catch (err: any) {
     addLog('ERROR', 'FFMPEG', 'Error exporting master video: ' + err.message);
@@ -3099,6 +3587,7 @@ app.post('/api/export-master', requireCloudspaceDomain, async (req, res) => {
 
 // 12. Extended Master Video Export (+ Google I/O Outro with 2-second Fade Transition)
 app.post('/api/export-extended-master', requireCloudspaceDomain, async (req, res) => {
+  const renderStartTime = Date.now();
   try {
     const {
       jobId,
@@ -3216,16 +3705,30 @@ app.post('/api/export-extended-master', requireCloudspaceDomain, async (req, res
 
     await execFFmpeg(ffmpegArgs);
 
+    const renderDurationSeconds = Math.max(1, Math.round((Date.now() - renderStartTime) / 1000));
+    const profileKey = is4K ? 'full_2min_4k' : 'full_2min_720p';
+    try {
+      await recordRenderBenchmark(profileKey, renderDurationSeconds);
+    } catch (benchErr: any) {
+      console.warn(`[BENCHMARKS] Failed to record benchmark for ${profileKey}:`, benchErr.message);
+    }
+
     // 4. Upload to GCS and update persistent job state
     let finalExtendedUri = `/output/${outputFilename}`;
     try {
       finalExtendedUri = await uploadAssetToGcs(jobId, extendedMasterOutputPath, 'extended-master', outputFilename);
       if (jobState) {
+        const updatedMetrics: RenderMetrics = {
+          ...(jobState.renderMetrics || {}),
+          [is4K ? 'extended4kRenderSeconds' : 'extended720pRenderSeconds']: renderDurationSeconds,
+          lastUpdated: new Date().toISOString(),
+        };
         await saveJobStateToGcs({
           ...jobState,
           extendedMasterVideoUri: finalExtendedUri,
           extended720pUri: !is4K ? finalExtendedUri : jobState.extended720pUri,
           extended4kUri: is4K ? finalExtendedUri : jobState.extended4kUri,
+          renderMetrics: updatedMetrics,
         });
       }
     } catch (gcsErr: any) {
@@ -3235,7 +3738,7 @@ app.post('/api/export-extended-master', requireCloudspaceDomain, async (req, res
     addLog(
       'SUCCESS',
       'FFMPEG',
-      `Extended Master Video (${outputFilename}, ${is4K ? '4K UHD' : '720p'}) created and uploaded successfully. ${
+      `Extended Master Video (${outputFilename}, ${is4K ? '4K UHD' : '720p'}) created and uploaded successfully in ${renderDurationSeconds}s. ${
         userEmail ? `Target notification recipient: ${userEmail}` : ''
       }`
     );
@@ -3248,10 +3751,127 @@ app.post('/api/export-extended-master', requireCloudspaceDomain, async (req, res
       qualityMode: is4K ? 'FULL_4K' : 'FAST_720P',
       resolution: is4K ? '4k' : '720p',
       totalDuration: masterDuration + 93.22 - transitionDuration,
+      renderDurationSeconds,
+      renderProfile: profileKey,
     });
   } catch (err: any) {
     addLog('ERROR', 'FFMPEG', 'Error exporting extended master video: ' + err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// 13. Render Benchmarks for realistic ETA calculation
+app.get('/api/render-benchmarks', async (req, res) => {
+  try {
+    const benchmarks = await getGlobalRenderBenchmarks();
+    return res.json({ success: true, benchmarks });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 14. Auto-upload Video to YouTube as Unlisted
+app.post('/api/youtube/upload', requireCloudspaceDomain, async (req, res) => {
+  try {
+    const {
+      videoUri,
+      title = 'Magic Countdown - 4K Director Cut',
+      description = 'Generated with Magic Countdown Generator',
+      privacyStatus = 'unlisted',
+      accessToken,
+    } = req.body as {
+      videoUri: string;
+      title?: string;
+      description?: string;
+      privacyStatus?: 'unlisted' | 'private' | 'public';
+      accessToken?: string;
+    };
+
+    if (!videoUri) {
+      return res.status(400).json({ error: 'videoUri is required for YouTube upload' });
+    }
+
+    if (!accessToken) {
+      return res.status(401).json({ error: 'YouTube OAuth access token is required. Please grant YouTube upload permission.' });
+    }
+
+    const localFilePath = await ensureLocalAssetFile(videoUri, WORKSPACE_ROOT, OUTPUT_DIR);
+    if (!fs.existsSync(localFilePath)) {
+      return res.status(404).json({ error: `Video file could not be found locally: ${localFilePath}` });
+    }
+
+    const fileSize = fs.statSync(localFilePath).size;
+    addLog('INFO', 'SYSTEM', `Initiating YouTube Unlisted Upload for ${path.basename(localFilePath)} (${(fileSize / (1024 * 1024)).toFixed(1)} MB)...`);
+
+    // Step 1: Initiate Resumable Upload Session
+    const initRes = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': 'video/mp4',
+        'X-Upload-Content-Length': fileSize.toString(),
+      },
+      body: JSON.stringify({
+        snippet: {
+          title: title.slice(0, 100),
+          description: `${description}\n\nGenerated with Magic Countdown Maker on Google Cloud Platform.`,
+          tags: ['Countdown', 'Veo', 'Gemini', 'Google AI', 'Director Cut'],
+          categoryId: '28', // Science & Technology
+        },
+        status: {
+          privacyStatus: privacyStatus || 'unlisted',
+          selfDeclaredMadeForKids: false,
+        },
+      }),
+    });
+
+    if (!initRes.ok) {
+      const errText = await initRes.text();
+      addLog('ERROR', 'SYSTEM', `YouTube upload initialization failed (${initRes.status}): ${errText}`);
+      let parsedErr: any = null;
+      try { parsedErr = JSON.parse(errText); } catch {}
+      const message = parsedErr?.error?.message || errText || `YouTube API returned status ${initRes.status}`;
+      return res.status(initRes.status).json({ error: message });
+    }
+
+    const uploadUrl = initRes.headers.get('location');
+    if (!uploadUrl) {
+      return res.status(502).json({ error: 'YouTube API did not return an upload location header.' });
+    }
+
+    // Step 2: Upload Video File Content
+    const fileBuffer = fs.readFileSync(localFilePath);
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Length': fileSize.toString(),
+        'Content-Type': 'video/mp4',
+      },
+      body: fileBuffer,
+    });
+
+    if (!uploadRes.ok) {
+      const errText = await uploadRes.text();
+      addLog('ERROR', 'SYSTEM', `YouTube video content upload failed (${uploadRes.status}): ${errText}`);
+      return res.status(uploadRes.status).json({ error: errText || 'Failed to upload video content to YouTube' });
+    }
+
+    const uploadData: any = await uploadRes.json();
+    const videoId = uploadData.id;
+    const youtubeUrl = `https://youtu.be/${videoId}`;
+
+    addLog('SUCCESS', 'SYSTEM', `Video uploaded to YouTube successfully as unlisted: ${youtubeUrl}`);
+    return res.json({
+      success: true,
+      videoId,
+      youtubeUrl,
+      title: uploadData.snippet?.title || title,
+      privacyStatus: uploadData.status?.privacyStatus || privacyStatus,
+    });
+  } catch (err: any) {
+    addLog('ERROR', 'SYSTEM', `YouTube upload error: ${err.message}`);
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -3273,11 +3893,13 @@ app.get('*', (req, res, next) => {
   return res.status(404).send('Page not found');
 });
 
-app.listen(PORT, async () => {
-  console.log(`⚡ CountdownMaker Server running on http://localhost:${PORT}`);
-  try {
-    await ensureStaticAsset('countdown_track.mp3', 'public/countdown/countdown_track.mp3');
-  } catch (err: any) {
-    console.warn('[STARTUP] Failed to ensure countdown_track.mp3:', err.message);
-  }
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, async () => {
+    console.log(`⚡ CountdownMaker Server running on http://localhost:${PORT}`);
+    try {
+      await ensureStaticAsset('countdown_track.mp3', 'public/countdown/countdown_track.mp3');
+    } catch (err: any) {
+      console.warn('[STARTUP] Failed to ensure countdown_track.mp3:', err.message);
+    }
+  });
+}

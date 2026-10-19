@@ -24,8 +24,10 @@ interface BulkVideoProgressPanelProps {
   onProceedToPreview: () => void;
   onRetrySlot: (slotIndex: number) => void;
   onRetryAllFailed?: () => void;
+  onRegenerateAll?: () => void;
   onOpenStepGuide?: () => void;
   currentJobId?: string | null;
+  brandName?: string;
 }
 
 export const BulkVideoProgressPanel: React.FC<BulkVideoProgressPanelProps> = ({
@@ -37,8 +39,10 @@ export const BulkVideoProgressPanel: React.FC<BulkVideoProgressPanelProps> = ({
   onProceedToPreview,
   onRetrySlot,
   onRetryAllFailed,
+  onRegenerateAll,
   onOpenStepGuide,
   currentJobId,
+  brandName,
 }) => {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [selectedError, setSelectedError] = useState<{ slotNum: number; error: string } | null>(null);
@@ -96,10 +100,15 @@ export const BulkVideoProgressPanel: React.FC<BulkVideoProgressPanelProps> = ({
             <Zap className="w-5 h-5 fill-current" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
                 Step 2: Creating Your 10 Countdown Scenes
               </h2>
+              {brandName && (
+                <span className="px-3 py-0.5 rounded-full text-xs font-black bg-gradient-to-r from-purple-500/20 to-blue-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/40 shadow-sm">
+                  {brandName}
+                </span>
+              )}
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
                 2 scenes at a time
               </span>
@@ -132,6 +141,19 @@ export const BulkVideoProgressPanel: React.FC<BulkVideoProgressPanelProps> = ({
             >
               <RefreshCw className={`w-4 h-4 ${isAnyLoading ? 'animate-spin' : ''}`} />
               <span>Retry All {failedCount} Failed Scenes</span>
+            </button>
+          )}
+
+          {onRegenerateAll && completedCount > 0 && (
+            <button
+              type="button"
+              onClick={onRegenerateAll}
+              disabled={isAnyLoading}
+              className="px-4 py-3 rounded-2xl text-xs sm:text-sm font-bold flex items-center gap-2 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition-all active:scale-95 disabled:opacity-50 shadow-sm"
+              title="Regenerate all 10 scenes from current prompts and invalidate previous final cuts"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isAnyLoading ? 'animate-spin' : ''}`} />
+              <span>Regenerate All 10</span>
             </button>
           )}
 

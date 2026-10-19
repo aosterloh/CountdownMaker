@@ -253,6 +253,7 @@ export const SlotCard: React.FC<SlotCardProps> = ({
                   muted
                   playsInline
                   controls
+                  controlsList="nodownload"
                   className="w-full h-full object-cover"
                 />
               </div>

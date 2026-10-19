@@ -1,0 +1,74 @@
+{
+  "hosting": {
+    "site": "countdown-maker",
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      ".firebaserc",
+      "Dockerfile",
+      ".dockerignore",
+      "deploy.sh",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(js|css|html)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, must-revalidate"
+          }
+        ]
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "/api/**",
+        "run": {
+          "serviceId": "countdown-maker",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/output/**",
+        "run": {
+          "serviceId": "countdown-maker",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/uploads/**",
+        "run": {
+          "serviceId": "countdown-maker",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/countdown/**",
+        "run": {
+          "serviceId": "countdown-maker",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/veo-prompt-rules**",
+        "run": {
+          "serviceId": "countdown-maker",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/veo-prompt-guide**",
+        "run": {
+          "serviceId": "countdown-maker",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

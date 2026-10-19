@@ -12,9 +12,11 @@ import {
   ArrowRight,
   CheckCircle2,
   Layers,
+  AlertTriangle,
 } from 'lucide-react';
 import { CountdownSlot } from '../types';
 import { getMediaUrl } from '../utils/media';
+import { extractTimestampFromUri, getLatestSlotVideoTimestamp } from '../utils/videoTimeline';
 
 interface SimplifiedAudioPreviewProps {
   slots: CountdownSlot[];
@@ -40,17 +42,18 @@ export const SimplifiedAudioPreview: React.FC<SimplifiedAudioPreviewProps> = ({
   onProceedToMaster,
   onSelectSlot,
 }) => {
-  // Preview mode: if a finished Final Cut exists, default to 'final_cut'; otherwise 'individual_scenes'
-  const [previewMode, setPreviewMode] = useState<'final_cut' | 'individual_scenes'>(
-    masterVideoUri ? 'final_cut' : 'individual_scenes'
-  );
+  // Preview mode: always default to 'individual_scenes' (Scene Takes) so newly generated takes from Step 5 are immediately active
+  const [previewMode, setPreviewMode] = useState<'final_cut' | 'individual_scenes'>('individual_scenes');
 
-  // Sync preview mode if masterVideoUri becomes available
-  useEffect(() => {
-    if (masterVideoUri && previewMode === 'individual_scenes') {
-      setPreviewMode('final_cut');
-    }
-  }, [masterVideoUri]);
+  // Detect if active scene takes were generated after the master video cut
+  const latestSceneTakeTimestamp = useMemo(() => getLatestSlotVideoTimestamp(slots), [slots]);
+  const masterCutTimestamp = useMemo(() => extractTimestampFromUri(masterVideoUri), [masterVideoUri]);
+  const isFinalCutOutdated = Boolean(
+    masterVideoUri &&
+    latestSceneTakeTimestamp > 0 &&
+    masterCutTimestamp > 0 &&
+    latestSceneTakeTimestamp > masterCutTimestamp
+  );
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0.0);
@@ -458,6 +461,11 @@ export const SimplifiedAudioPreview: React.FC<SimplifiedAudioPreviewProps> = ({
               >
                 <Film className="w-3 h-3" />
                 <span>Final Cut</span>
+                {isFinalCutOutdated && (
+                  <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-amber-500/20 text-amber-500 border border-amber-500/30">
+                    Outdated
+                  </span>
+                )}
               </button>
               <button
                 type="button"
@@ -507,6 +515,28 @@ export const SimplifiedAudioPreview: React.FC<SimplifiedAudioPreviewProps> = ({
         </div>
       </div>
 
+      {/* Outdated Final Cut Banner */}
+      {masterVideoUri && isFinalCutOutdated && previewMode === 'final_cut' && (
+        <div className="mb-3 px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs flex flex-wrap items-center justify-between gap-2 animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+            <span>
+              <strong>Notice:</strong> This Final Cut was generated before recent scene take edits. Switch to <strong>Scene Takes</strong> to preview your new clips, or re-export in the studio below.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (isPlaying) togglePlay();
+              setPreviewMode('individual_scenes');
+            }}
+            className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition shrink-0 cursor-pointer"
+          >
+            Switch to Scene Takes
+          </button>
+        </div>
+      )}
+
       {/* Main Preview Viewport */}
       <div className="relative aspect-video w-full max-w-4xl mx-auto rounded-2xl bg-black border border-slate-800 overflow-hidden shadow-2xl flex items-center justify-center group select-none">
         {/* MODE 1: Finished Final Cut Mode (Single Continuous 30s MP4) */}
@@ -515,6 +545,7 @@ export const SimplifiedAudioPreview: React.FC<SimplifiedAudioPreviewProps> = ({
             ref={masterVideoRef}
             src={resolvedMasterVideoUrl}
             playsInline
+            muted={isMuted}
             className="w-full h-full object-cover"
           />
         ) : (
@@ -538,6 +569,7 @@ export const SimplifiedAudioPreview: React.FC<SimplifiedAudioPreviewProps> = ({
             {/* Video Buffer A (Active on Even Segments: 10, 8, 6, 4, 2) */}
             {srcA && (
               <video
+                key={srcA}
                 ref={videoRefA}
                 src={srcA}
                 muted
@@ -555,6 +587,7 @@ export const SimplifiedAudioPreview: React.FC<SimplifiedAudioPreviewProps> = ({
             {/* Video Buffer B (Active on Odd Segments: 9, 7, 5, 3, 1) */}
             {srcB && (
               <video
+                key={srcB}
                 ref={videoRefB}
                 src={srcB}
                 muted
@@ -594,9 +627,22 @@ export const SimplifiedAudioPreview: React.FC<SimplifiedAudioPreviewProps> = ({
             </span>
 
             {previewMode === 'final_cut' && (
-              <span className="px-2.5 py-1.5 rounded-xl bg-emerald-950/80 backdrop-blur-md border border-emerald-500/30 text-[10px] font-mono font-bold text-emerald-300 shadow flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                <span>Final Cut</span>
+              <span className={`px-2.5 py-1.5 rounded-xl backdrop-blur-md border text-[10px] font-mono font-bold shadow flex items-center gap-1 ${
+                isFinalCutOutdated
+                  ? 'bg-amber-950/80 border-amber-500/40 text-amber-300'
+                  : 'bg-emerald-950/80 border-emerald-500/30 text-emerald-300'
+              }`}>
+                {isFinalCutOutdated ? (
+                  <>
+                    <AlertTriangle className="w-3 h-3 text-amber-400" />
+                    <span>Final Cut (Outdated Takes)</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    <span>Final Cut</span>
+                  </>
+                )}
               </span>
             )}
           </div>

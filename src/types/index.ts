@@ -1,6 +1,7 @@
 export type TemporalMode = 'SPEED_UP' | 'PASSTHROUGH' | 'TRUNCATE_FRONT' | 'TRUNCATE_BACK';
 
 export type ImageModelType =
+  | 'gemini-nano-banana-2.1'
   | 'gemini-3.1-flash-image'
   | 'imagen-3.0-generate-002'
   | 'imagen-3.0-fast-generate-001'
@@ -142,6 +143,22 @@ export interface GroundingMetadata {
   sources?: GroundingSource[];
 }
 
+export interface RenderMetrics {
+  master720pRenderSeconds?: number;
+  master4kRenderSeconds?: number;
+  extended720pRenderSeconds?: number;
+  extended4kRenderSeconds?: number;
+  lastUpdated?: string;
+}
+
+export interface RenderBenchmarks {
+  countdown_30s_720p: number;
+  countdown_30s_4k: number;
+  full_2min_720p: number;
+  full_2min_4k: number;
+  lastUpdated?: string;
+}
+
 export interface CountdownJobState {
   jobId: string;
   customerName: string;
@@ -159,11 +176,13 @@ export interface CountdownJobState {
   extendedMasterVideoUri?: string;
   extended720pUri?: string;
   extended4kUri?: string;
+  renderMetrics?: RenderMetrics;
   groundingMetadata?: GroundingMetadata;
   geminiModelUsed?: string;
   createdAt: string;
   updatedAt: string;
 }
+
 
 export interface VeoActiveWorker {
   workerId: 1 | 2;
@@ -198,3 +217,22 @@ export interface VeoQueueStatus {
   lastClipDurationSeconds?: number | null;
 }
 
+export interface CustomerMeetingPackageConfig {
+  includeCinemaWallpaper: boolean;
+  includeBugdroidMascot: boolean;
+  includeCountdownVideo: boolean;
+}
+
+export interface CustomerMeetingDeliverables {
+  brandName?: string;
+  industry?: string;
+  businessSummary?: string;
+  cinemaWallpaperUri?: string | null;
+  cinemaWallpaperPrompt?: string;
+  isGeneratingWallpaper?: boolean;
+  wallpaperError?: string | null;
+  bugdroidMascotUri?: string | null;
+  bugdroidMascotPrompt?: string;
+  isGeneratingBugdroid?: boolean;
+  bugdroidError?: string | null;
+}

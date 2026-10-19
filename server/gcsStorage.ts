@@ -28,9 +28,18 @@ export interface JobMetadata {
   updatedAt: string;
 }
 
+export interface RenderMetrics {
+  master720pRenderSeconds?: number;
+  master4kRenderSeconds?: number;
+  extended720pRenderSeconds?: number;
+  extended4kRenderSeconds?: number;
+  lastUpdated?: string;
+}
+
 export interface StoredJobState {
   jobId: string;
   customerName: string;
+  companyUrl?: string;
   creatorLdap?: string;
   creativeTheme: string;
   styleModifiers?: string;
@@ -44,9 +53,11 @@ export interface StoredJobState {
   extendedMasterVideoUri?: string;
   extended720pUri?: string;
   extended4kUri?: string;
+  renderMetrics?: RenderMetrics;
   createdAt: string;
   updatedAt: string;
 }
+
 
 /**
  * Dynamically resolves the best GCS Bucket instance:
@@ -483,3 +494,110 @@ export async function bulkDeleteAllJobsFromGcs(): Promise<boolean> {
     return false;
   }
 }
+
+export interface GlobalRenderBenchmarks {
+  countdown_30s_720p: number;
+  countdown_30s_4k: number;
+  full_2min_720p: number;
+  full_2min_4k: number;
+  sampleCount?: {
+    countdown_30s_720p: number;
+    countdown_30s_4k: number;
+    full_2min_720p: number;
+    full_2min_4k: number;
+  };
+  lastUpdated: string;
+}
+
+const DEFAULT_BENCHMARKS: GlobalRenderBenchmarks = {
+  countdown_30s_720p: 18,
+  countdown_30s_4k: 48,
+  full_2min_720p: 35,
+  full_2min_4k: 110,
+  sampleCount: {
+    countdown_30s_720p: 5,
+    countdown_30s_4k: 5,
+    full_2min_720p: 3,
+    full_2min_4k: 3,
+  },
+  lastUpdated: new Date().toISOString(),
+};
+
+let memoryBenchmarks: GlobalRenderBenchmarks = { ...DEFAULT_BENCHMARKS };
+let benchmarksLoadedFromGcs = false;
+
+export async function getGlobalRenderBenchmarks(): Promise<GlobalRenderBenchmarks> {
+  if (benchmarksLoadedFromGcs) {
+    return memoryBenchmarks;
+  }
+
+  try {
+    const bucket = getStorageBucket();
+    const file = bucket.file('system/render_benchmarks.json');
+    const [exists] = await file.exists();
+    if (exists) {
+      const [contents] = await file.download();
+      const parsed = JSON.parse(contents.toString('utf-8')) as GlobalRenderBenchmarks;
+      memoryBenchmarks = {
+        ...DEFAULT_BENCHMARKS,
+        ...parsed,
+        sampleCount: {
+          countdown_30s_720p: parsed.sampleCount?.countdown_30s_720p ?? DEFAULT_BENCHMARKS.sampleCount!.countdown_30s_720p,
+          countdown_30s_4k: parsed.sampleCount?.countdown_30s_4k ?? DEFAULT_BENCHMARKS.sampleCount!.countdown_30s_4k,
+          full_2min_720p: parsed.sampleCount?.full_2min_720p ?? DEFAULT_BENCHMARKS.sampleCount!.full_2min_720p,
+          full_2min_4k: parsed.sampleCount?.full_2min_4k ?? DEFAULT_BENCHMARKS.sampleCount!.full_2min_4k,
+        },
+      };
+    }
+    benchmarksLoadedFromGcs = true;
+  } catch (e: any) {
+    // Non-fatal, fallback to memory benchmarks
+    console.warn('[BENCHMARKS] Using default in-memory render benchmarks:', e.message);
+  }
+
+  return memoryBenchmarks;
+}
+
+export async function recordRenderBenchmark(
+  profile: 'countdown_30s_720p' | 'countdown_30s_4k' | 'full_2min_720p' | 'full_2min_4k',
+  durationSeconds: number
+): Promise<GlobalRenderBenchmarks> {
+  if (durationSeconds <= 0) return memoryBenchmarks;
+
+  // Load existing if not already loaded
+  await getGlobalRenderBenchmarks();
+
+  const currentVal = memoryBenchmarks[profile] || DEFAULT_BENCHMARKS[profile];
+  const samples = memoryBenchmarks.sampleCount?.[profile] || 1;
+
+  // Weighted moving average giving 35% weight to newest observation, 65% to historical
+  const updatedVal = Math.max(3, Math.round(currentVal * 0.65 + durationSeconds * 0.35));
+
+  memoryBenchmarks = {
+    ...memoryBenchmarks,
+    [profile]: updatedVal,
+    sampleCount: {
+      ...memoryBenchmarks.sampleCount!,
+      [profile]: samples + 1,
+    },
+    lastUpdated: new Date().toISOString(),
+  };
+
+  // Asynchronously persist to GCS
+  (async () => {
+    try {
+      const bucket = getStorageBucket();
+      const file = bucket.file('system/render_benchmarks.json');
+      await file.save(JSON.stringify(memoryBenchmarks, null, 2), {
+        contentType: 'application/json',
+        resumable: false,
+      });
+      console.log(`[BENCHMARKS] Persisted benchmark for ${profile}: ${durationSeconds}s (new average: ${updatedVal}s)`);
+    } catch (err: any) {
+      console.warn('[BENCHMARKS] Failed to persist system/render_benchmarks.json to GCS:', err.message);
+    }
+  })().catch(() => {});
+
+  return memoryBenchmarks;
+}
+

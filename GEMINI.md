@@ -20,4 +20,28 @@
 
 
 ## Model use
-- use the latest Gemini models or ask user which version to use during initial project setup. Do not use older models. 
+- use the latest Gemini models or ask user which version to use during initial project setup. Do not use older models.
+
+## Authentication Standard (Default Pattern)
+Every web application built or modified MUST enforce corporate Googler authentication via Firebase:
+
+1. **Authentication Mechanism**:
+   - Google Sign-In via Firebase Auth. No manual passwords or passcodes.
+   - Present a clean Google-branded "Sign in with Google" screen before rendering app features.
+
+2. **Hardcoded Firebase Configuration**:
+   ```javascript
+   export const firebaseConfig = {
+     apiKey: "AIzaSyBDfu44ElID27cy2lvozY2BD1izTq7AIuo",
+     authDomain: "aosterloh-cs-muc.firebaseapp.com",
+     projectId: "aosterloh-cs-muc",
+     storageBucket: "aosterloh-cs-muc.appspot.com",
+     appId: "1:557450838719:web:5e51f"
+   };
+   ```
+
+3. **Googler Domain Restriction (@google.com)**:
+   - Configure `GoogleAuthProvider` with `provider.setCustomParameters({ hd: 'google.com', prompt: 'select_account' })`.
+   - On `onAuthStateChanged`, verify `user.email.toLowerCase().endsWith('@google.com')`.
+   - If not `@google.com`, immediately call `auth.signOut()` and show an "Access Denied: @google.com accounts only" message.
+ 

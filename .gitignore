@@ -9,8 +9,11 @@ node_modules/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.yaml
+.env.*.yaml
 *.key
 *.pem
+.firebase/
 
 # Build outputs
 dist/
