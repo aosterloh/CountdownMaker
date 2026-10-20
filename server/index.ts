@@ -1241,40 +1241,47 @@ app.post('/api/suggest-brand-ideas', requireCloudspaceDomain, async (req, res) =
 You are given the official corporate website URL: "${normalizedUrl}".
 
 Execute these tasks using Google Search grounding:
-1. Ground the official organization/company behind this URL. Identify its official name, country/headquarters, and a factual summary of its core business, services, products, facilities, and operational domain.
-CRITICAL ANTI-CONFUSION RULE: Focus strictly and exclusively on what this specific organization actually does. Do not borrow props, terminology, or aesthetics from unrelated industries.
+1. Ground the official organization/company behind this URL. Identify its official name, country/headquarters, and a factual summary of its core business, services, products, and industry domain.
+2. Identify 3 to 5 distinct official Business Divisions / Strategic Pillars of this company (e.g., for BASF: Agricultural Solutions | Nutrition & Care | Surface Technologies & Battery Materials | Materials & Circular Economy | Clean Energy & Catalysts).
+CRITICAL ANTI-CONFUSION RULE: Focus strictly and exclusively on what this specific organization actually does across its real business divisions. Do not borrow props, terminology, or aesthetics from unrelated industries.
 
-2. Generate exactly 10 distinct, domain-authentic visual substrates and physical scene ideas for countdown numbers 10 down to 1 following the veo-prompt-guide rules:
+🚨 POSITIVE & FUTURISTIC OUTLOOK REQUIREMENT:
+The imagery MUST be optimistic, cutting-edge, sunlit or cleanly illuminated, inspiring, and harmonious with nature or human ingenuity.
+DO NOT generate grim, dark, heavy industrial facilities, smokestacks, gray exhaust fumes, cooling towers, ugly chemical cracking pipes, dark shipping containers, or generic office cafeterias.
+Instead, distribute the 10 countdown scenes (10 down to 1) across the company's 3–5 core business divisions using a 5 Pillars × 2 Shots structure (pairing an authentic "Modern Core" scene with an uplifting "Futuristic Vision" variation for each business area, culminating in an iconic "Futuristic Hero" finale for Numeral "1").
+
+3. Generate exactly 10 distinct, domain-authentic visual substrates and physical scene ideas for countdown numbers 10 down to 1 following the veo-prompt-guide rules:
+- Explicitly prefix every scene with its Business Pillar and Mode in brackets: [Business Pillar Name — Modern Core] or [Business Pillar Name — Futuristic Vision].
 - Approved Substrates:
-  * High-visibility industrial stencils: Crisp, high-contrast, opaque painted lettering stenciled directly onto primary operational machinery, structural casings, or transport containers native to this organization's operations.
-  * Physical instrumentation & native displays: High-luminance backlit digital readouts, physical segmented indicators, or illuminated mechanical dials that exist as genuine hardware components within this organization's facilities or equipment.
-  * Dimensional physical signage: Physical three-dimensional numerals fabricated from materials native to this organization's real-world environment (machined alloys, technical composites, architectural stone, or industrial polymers).
-- Strictly Banned: Low-contrast laser etchings, monochrome metal stamps, floating 2D digital overlays, synthetic HUD graphics, post-production CGI watermarks, artificial graphic overlays.
-- Authentic Environments: Strictly isolate the visual language to this organization's actual facilities, machinery, workflows, and locations discovered during search grounding. Do not inject external props or generic industrial clichés.
+  * High-visibility clean stencils & fairings: Crisp, high-contrast, opaque painted lettering stenciled directly onto sleek autonomous machinery, solar sensors, wind turbine hubs, or aerodynamic surfaces native to that business division.
+  * Physical instrumentation & smart displays: High-luminance backlit digital readouts, curved glass bioreactor displays, or precision optical indicators integrated into clean laboratory or field hardware.
+  * Dimensional physical signage: Physical three-dimensional numerals fabricated from clean materials native to this organization's world (translucent biopolymers, brushed anodized alloys, solar glass, or sustainable architectural stone/timber).
+- Strictly Banned: Low-contrast laser etchings, monochrome dark metal stamps, floating 2D digital overlays, synthetic HUD graphics, post-production CGI watermarks, artificial graphic overlays.
 
 Provide your output strictly in this structured format with an empty blank line after each numbered scene:
 COMPANY_NAME: [Official Company Name]
 BUSINESS_SUMMARY: [1-2 sentences summarizing their core business and industry domain]
+BUSINESS_PILLARS: [Pillar 1 | Pillar 2 | Pillar 3 | Pillar 4 | Pillar 5]
 SCENES:
-1. Numeral "10": [Visual substrate and authentic scene description]
+1. Numeral "10" [Pillar 1 — Modern Core]: [Visual substrate and bright, authentic scene description]
 
-2. Numeral "9": [Visual substrate and authentic scene description]
+2. Numeral "9" [Pillar 1 — Futuristic Vision]: [Visual substrate and optimistic futuristic variation]
 
-3. Numeral "8": [Visual substrate and authentic scene description]
+3. Numeral "8" [Pillar 2 — Modern Core]: [Visual substrate and bright, authentic scene description]
 
-4. Numeral "7": [Visual substrate and authentic scene description]
+4. Numeral "7" [Pillar 2 — Futuristic Vision]: [Visual substrate and optimistic futuristic variation]
 
-5. Numeral "6": [Visual substrate and authentic scene description]
+5. Numeral "6" [Pillar 3 — Modern Core]: [Visual substrate and bright, authentic scene description]
 
-6. Numeral "5": [Visual substrate and authentic scene description]
+6. Numeral "5" [Pillar 3 — Futuristic Vision]: [Visual substrate and optimistic futuristic variation]
 
-7. Numeral "4": [Visual substrate and authentic scene description]
+7. Numeral "4" [Pillar 4 — Modern Core]: [Visual substrate and bright, authentic scene description]
 
-8. Numeral "3": [Visual substrate and authentic scene description]
+8. Numeral "3" [Pillar 4 — Futuristic Vision]: [Visual substrate and optimistic futuristic variation]
 
-9. Numeral "2": [Visual substrate and authentic scene description]
+9. Numeral "2" [Pillar 5 — Modern Core]: [Visual substrate and bright, authentic scene description]
 
-10. Numeral "1": [Visual substrate and authentic scene description]
+10. Numeral "1" [Pillar 5 — Futuristic Hero]: [Visual substrate and iconic, uplifting futuristic finale scene]
 `;
 
     if (key) {
@@ -1301,6 +1308,7 @@ SCENES:
             if (text) {
               let detectedBrand = '';
               let businessSummary = '';
+              let businessPillars: string[] = [];
               let visualIdeas = text;
 
               const nameMatch = text.match(/COMPANY_NAME:\s*(.+)/i);
@@ -1308,6 +1316,15 @@ SCENES:
 
               const summaryMatch = text.match(/BUSINESS_SUMMARY:\s*(.+)/i);
               if (summaryMatch) businessSummary = summaryMatch[1].trim();
+
+              const pillarsMatch = text.match(/BUSINESS_PILLARS:\s*(.+)/i);
+              if (pillarsMatch) {
+                businessPillars = pillarsMatch[1]
+                  .replace(/^\[|\]$/g, '')
+                  .split(/\||,/)
+                  .map((p: string) => p.trim())
+                  .filter(Boolean);
+              }
 
               const scenesMatch = text.match(/SCENES:([\s\S]+)/i);
               if (scenesMatch) {
@@ -1327,6 +1344,7 @@ SCENES:
                 brandName: brandDisplayName,
                 detectedBrandName: brandDisplayName,
                 businessSummary,
+                businessPillars,
                 visualIdeas,
                 rawResponse: text,
                 model: m,
@@ -1342,25 +1360,25 @@ SCENES:
 
     // Fallback if API key unavailable
     const fallbackBrand = hostname.replace(/^www\./, '').split('.')[0].toUpperCase();
-    const fallbackIdeas = `1. Numeral "10": High-visibility contrasting stencil on primary structural casing for ${fallbackBrand}
+    const fallbackIdeas = `1. Numeral "10" [Core Operations — Modern Core]: High-visibility contrasting white stencil on sleek solar-powered precision field sensor for ${fallbackBrand} in warm morning sunlight
 
-2. Numeral "9": Illuminated digital segment readout on central hardware control station
+2. Numeral "9" [Core Operations — Futuristic Vision]: Luminous cyan digital readout on autonomous aero-drone hovering inside a sunlit glass biosphere for ${fallbackBrand}
 
-3. Numeral "8": Dimensional machined metal numerals mounted on architectural facility panel
+3. Numeral "8" [Life Sciences & Innovation — Modern Core]: Glowing amber display on curved glass bio-extractor in a bright, sunlit biophilic research laboratory
 
-4. Numeral "7": High-contrast opaque stencil on technical equipment housing
+4. Numeral "7" [Life Sciences & Innovation — Futuristic Vision]: Dimensional pearl-white numeral mounted on a next-gen cellular synthesis pod surrounded by living green walls
 
-5. Numeral "6": High-luminance backlit physical display on operational telemetry rack
+5. Numeral "6" [Clean Mobility & Surface Tech — Modern Core]: High-contrast backlit white numeral on a solid-state battery module resting on a clean optical test bench
 
-6. Numeral "5": Raised physical numeral mounted on primary workstation console
+6. Numeral "5" [Clean Mobility & Surface Tech — Futuristic Vision]: Matte-white stencil on the iridescent eco-coated wing of a solar concept vehicle overlooking a sunlit coast
 
-7. Numeral "4": Contrasting painted stencil lettering on equipment exterior
+7. Numeral "4" [Circular Materials — Modern Core]: Luminous emerald-green numeral illuminated on a translucent circular biopolymer extruder spinning pure filament
 
-8. Numeral "3": Glowing numeric indicator on calibration diagnostic unit
+8. Numeral "3" [Circular Materials — Futuristic Vision]: Bold high-visibility orange stencil on the gleaming bio-composite hub of an offshore wind turbine above a turquoise sea
 
-9. Numeral "2": Crisp high-contrast typography prominently displayed on primary operational surface
+9. Numeral "2" [Clean Energy Systems — Modern Core]: Bright white LED numeral glowing on a transparent green-hydrogen electrolysis stack with rising oxygen micro-bubbles
 
-10. Numeral "1": Large hero numeral centered under directional key lighting in core facility`;
+10. Numeral "1" [Visionary Future Finale — Futuristic Hero]: Gleaming dimensional white numeral mounted on a sunlit glass-and-timber eco-campus monument at golden sunrise`;
 
     return res.json({
       success: true,
@@ -1369,6 +1387,13 @@ SCENES:
       brandName: fallbackBrand,
       detectedBrandName: fallbackBrand,
       businessSummary: `Official website: ${normalizedUrl}`,
+      businessPillars: [
+        'Core Operations',
+        'Life Sciences & Innovation',
+        'Clean Mobility & Surface Tech',
+        'Circular Materials',
+        'Clean Energy Systems',
+      ],
       visualIdeas: fallbackIdeas,
       model: 'procedural-fallback',
     });
@@ -1758,21 +1783,21 @@ app.post('/api/generate-diegetic-prompts', requireCloudspaceDomain, async (req, 
     addLog('INFO', 'GEMINI_AI', `Generating Diegetic Prompts with reveal strategy for brand "${brandName}"${companyUrl ? ` (${companyUrl})` : ''} using ${isCustom ? 'User Custom Prompt Guide' : 'Default veo-prompt-guide.md'} via Gemini 4 Argon...`);
 
     const userIdeasSection = themeContext && themeContext.trim().length > 0
-      ? `\n🚨 TOP PRIORITY VISUAL BLUEPRINT FROM USER (NON-NEGOTIABLE):\n"${themeContext.trim()}"\nYou MUST extract every specialized machine, technical facility, material, security mechanism, and operational process mentioned in these ideas and feature them prominently across the 10 scenes.\n`
+      ? `\n🚨 TOP PRIORITY VISUAL BLUEPRINT FROM USER (NON-NEGOTIABLE):\n"${themeContext.trim()}"\nYou MUST preserve the business pillar assignments, [Pillar — Modern Core / Futuristic Vision] labels, specialized equipment, clean environments, and positive futuristic variations defined in these ideas across the 10 scenes.\n`
       : '';
 
     const promptText = `You are an elite visual effects director, cinematographer, and generative video prompt director specializing in Google Veo 3.1.
 First, perform Google Search grounding to thoroughly research customer/brand "${brandName}"${companyUrl ? ` (Official Website URL: ${companyUrl})` : ''}:
-1. Their specialized physical products, hardware, chips, security documents, vehicles, or technical infrastructure.
-2. Their authentic industrial facilities, production lines, engineering laboratories, and cleanrooms.
-3. Their real-world field applications, end-user verification points, security touchpoints, or client operational environments.
-4. Their mission control centers, security operations vaults, automated logistics, and technical infrastructure.
+1. Identify 3 to 5 distinct official Business Divisions / Strategic Pillars of "${brandName}" (e.g., for BASF: Agricultural Solutions, Nutrition & Care, Surface Technologies & Battery Materials, Materials & Circular Economy, Clean Energy & Catalysts).
+2. Identify the clean, modern machinery, R&D biospheres, precision field sensors, sustainable materials, and progressive innovations authentic to each of these business divisions.
+3. Envision optimistic, bright "Futuristic Vision" variations for each division (e.g., sunlit precision smart farming, autonomous aero-agronomy drones, biophilic laboratories, solar-reflective eco-mobility, circular bio-resins, green hydrogen).
 
 ${userIdeasSection}
-STRICT RULE ON SCENE DOMAINS:
-Focus EXCLUSIVELY on the customer's authentic industry, specialized machinery, facilities, and technical workflows.
-DO NOT generate generic corporate office clichés (e.g. absolutely NO cafeterias, NO espresso lounges, NO colleagues laughing over coffee, NO generic office meeting rooms).
-Every single scene must feel authentic to what "${brandName}" specifically manufactures, engineers, secures, or deploys.
+🚨 POSITIVE & FUTURISTIC OUTLOOK + ANTI-GLOOM GUARDRAIL:
+- Structure the 10 countdown scenes (10 down to 1) across the company's 3–5 core business divisions using a 5 Pillars × 2 Shots balance (pairing authentic "Modern Core" excellence with uplifting "Futuristic Vision" variations, culminating in an iconic "Futuristic Hero" finale for Shot #1).
+- Explicitly prefix every "concept" title with its bracketed business pillar and mode, e.g.: "[Agricultural Solutions — Modern Core] Sunlit precision smart-farming field sensor" or "[Agricultural Solutions — Futuristic Vision] Autonomous pollination drone in glass vertical biosphere".
+- Every scene MUST feel optimistic, sunlit or cleanly illuminated, progressive, and harmonious with nature or human ingenuity.
+- DO NOT generate grim, dark heavy industrial plants, smokestacks, gray exhaust fumes, rusty chemical pipes, dark shipping containers, or generic corporate office cafeterias.
 
 Then, synthesize a dynamic, highly varied 10-shot countdown narrative arc counting down from 10 down to 1 tailored for "${brandName}".
 
@@ -1783,12 +1808,12 @@ Return ONLY a valid JSON array of 10 objects:
   {
     "index": 10,
     "diegeticNumber": 10,
-    "concept": "Specific authentic industrial setting, specialized machine, or facility title matching ${brandName}",
-    "objectEmbedding": "specific high-contrast luminous or stark graphical carrier (e.g. illuminated LED/e-ink telemetry display / laser-engraved security polycarbonate plate / backlit industrial stencil sign / stark white stencil on matte equipment chassis; NEVER bare dark metal cylinders)",
-    "revealMechanism": "Camera executes rapid cinematic zoom into carrier object",
-    "startImagePrompt": "Cinematic establishing shot of the scene. Clean scenic composition.",
+    "concept": "[Business Pillar — Modern Core / Futuristic Vision] Specific bright, domain-authentic setting or futuristic innovation matching ${brandName}",
+    "objectEmbedding": "specific high-contrast luminous or stark graphical carrier (e.g. illuminated LED/OLED smart display / crisp high-contrast stencil on sleek autonomous drone or sensor fairing / dimensional translucent biopolymer or brushed alloy numeral; NEVER bare dark metal cylinders)",
+    "revealMechanism": "Slow, steady, controlled camera dolly or slider keeping numeral in tack-sharp center focus",
+    "startImagePrompt": "Cinematic establishing shot of the bright, inspiring scene. Clean scenic composition.",
     "endImagePrompt": "Tight macro hero shot focused on carrier object with bold unpadded numeral '[N]' in razor-sharp center focus.",
-    "videoPrompt": "Silent 4-second clip revealing the number \"[N]\". [Draft a concise 45-65 word Veo 3.1 prompt strictly adhering to the Core Visibility Rules from the guide: front-load the unpadded numeral '[N]' (no leading zeros like '09') within the first 10 words, apply the 2x repetition rule, specify the exact reveal motion, pair with a high-contrast luminous/graphical carrier surface (no bare dark metal cylinders), and finish]."
+    "videoPrompt": "Silent 4-second clip revealing the number \"[N]\". [Draft a concise 45-65 word Veo 3.1 prompt strictly adhering to the Core Visibility Rules from the guide: front-load the unpadded numeral '[N]' (no leading zeros like '09') within the first 10 words, apply the 2x repetition rule, specify slow controlled camera motion, pair with a high-contrast luminous/graphical carrier surface in a bright, uplifting domain environment, and finish]."
   }
 ]`;
 
@@ -1969,27 +1994,27 @@ Return ONLY a valid JSON array of 10 objects:
         { num: 1, concept: `aircraft composite winglet navigation beacon catching brilliant golden sunset rays`, embed: "illuminated winglet beacon housing", reveal: "Camera tracks smoothly along composite wingtip, bringing luminous beacon into sharp radiance" },
       ];
     } else {
-      // Universal Premium Brand Setting (4-Pillar Narrative Arc: Tech, People, Action, Logistics)
+      // Universal 5-Pillar × (Modern Core + Futuristic Vision) Positive Brand Arc
       const universalStages = [
-        { name: "advanced R&D prototyping laboratory with laser optics", carrier: "illuminated LED diagnostic display screen" },
-        { name: "modern sunlit campus cafeteria with colleagues chatting over coffee", carrier: "laser-engraved brushed brass lounge plaque" },
-        { name: "automated robotic precision manufacturing and assembly cell", carrier: "brushed dark aluminum chassis" },
-        { name: "glass-walled creative design studio with team collaborating on whiteboard", carrier: "transparent glass board with neon orange writing" },
-        { name: "global automated distribution and logistics cargo terminal at dusk", carrier: "matte black cargo container hatch" },
-        { name: "real-world high-performance field operation in scenic outdoor setting", carrier: "illuminated digital telemetry dial" },
-        { name: "customer experience center with client interacting with new product", carrier: "high-contrast illuminated kiosk screen" },
-        { name: "large-scale sustainable infrastructure facility with green energy arrays", carrier: "heavy brushed copper power plate" },
-        { name: "executive command operations bridge overlooking city skyline at twilight", carrier: "brushed dark titanium console dial" },
-        { name: "flagship final presentation showcase under dramatic architectural lighting", carrier: "hand-polished mirror titanium emblem" },
+        { name: "[Agricultural & Environmental Solutions — Modern Core] sunlit precision smart-farming field sensor in green crops", carrier: "crisp white stencil on solar-powered precision field sensor" },
+        { name: "[Agricultural & Environmental Solutions — Futuristic Vision] autonomous aero-agronomy drone inside sunlit glass vertical biosphere", carrier: "luminous cyan digital display on sleek white drone fairing" },
+        { name: "[Life Sciences & Bio-Innovation — Modern Core] bright biophilic botanical research laboratory with glass bio-extractor", carrier: "glowing amber OLED readout on curved glass bio-extractor" },
+        { name: "[Life Sciences & Bio-Innovation — Futuristic Vision] next-gen cellular synthesis pod surrounded by living green walls", carrier: "dimensional pearl-white numeral mounted on bio-synthesizer pod" },
+        { name: "[Clean Mobility & Surface Tech — Modern Core] solid-state EV battery cathode laboratory with optical test bench", carrier: "high-contrast backlit white numeral on precision battery module" },
+        { name: "[Clean Mobility & Surface Tech — Futuristic Vision] solar-reflective aerodynamic concept vehicle on sunlit coastal cliff", carrier: "matte-white stencil on iridescent eco-coated aerodynamic wing" },
+        { name: "[Circular Materials & Design — Modern Core] translucent biopolymer filament studio turning recycled feedstocks into pure resin", carrier: "luminous emerald-green numeral on smart extruder bezel" },
+        { name: "[Circular Materials & Design — Futuristic Vision] ultra-lightweight bio-composite offshore wind turbine above turquoise sea", carrier: "bold high-visibility orange stencil on gleaming white turbine hub" },
+        { name: "[Clean Energy & Catalyst Systems — Modern Core] transparent green-hydrogen water-electrolysis stack in golden sunlight", carrier: "bright white LED numeral on brushed anodized electrolysis frame" },
+        { name: "[Visionary Future Finale — Futuristic Hero] sunlit architectural glass-and-timber eco-campus dome at golden sunrise", carrier: "gleaming dimensional white numeral mounted on solar monument" },
       ];
 
       concepts = universalStages.map((stage, i) => {
         const num = 10 - i;
         return {
           num,
-          concept: `${stage.name} for ${brandName || 'premium engineering'}`,
+          concept: `${stage.name} for ${brandName || 'visionary innovation'}`,
           embed: stage.carrier,
-          reveal: `Camera executes a rapid cinematic push-in zoom into the center of the ${stage.carrier}`,
+          reveal: `Camera executes a slow, steady forward dolly maintaining tack-sharp focus on the ${stage.carrier}`,
         };
       });
     }
@@ -2037,7 +2062,7 @@ app.post('/api/recreate-prompt', async (req, res) => {
         .join('\n');
       contextSection = `
 4. VISUAL CONTEXT & THEMATIC CONTINUITY (CRITICAL):
-   The user is creating a cohesive countdown sequence counting down from 10 down to 1.
+   The user is creating a cohesive countdown sequence counting down from 10 down to 1 across 3–5 core business divisions of "${brandName}" (pairing Modern Core excellence with positive Futuristic Vision variations).
    Previous shots established so far:
 ${summaryList}
    Maintain aesthetic, lighting, palette, and domain continuity with these earlier shots, but choose a DISTINCT, dynamic new scene element, carrier object, and camera angle for Shot #${diegeticNumber}.`;
@@ -2055,7 +2080,10 @@ ${summaryList}
     const promptText = `You are an elite visual effects director, cinematographer, and generative video prompt engineer specializing in Google Veo 3.1.
 Generate a single, breathtaking 4-second cinematic video concept specifically for countdown Shot #${diegeticNumber} tailored for customer "${brandName}"${companyUrl ? ` (Website URL: ${companyUrl})` : ''} and setting/theme "${themeContext}".
 
-STRICT RULE: The scene MUST focus 100% on customer "${brandName}"'s authentic industrial machinery, technical facilities, production lines, or specialized operational touchpoints. Absolutely NO generic corporate office, cafeteria, or espresso lounge clichés.
+STRICT POSITIVE & DOMAIN RULE:
+- Focus 100% on customer "${brandName}"'s real business divisions, pairing authentic modern innovation with a bright, optimistic, futuristic outlook (sunlit precision tech, biophilic clean labs, sustainable materials, harmony with nature).
+- Prefix the "concept" with the bracketed business division and mode: "[Business Pillar — Modern Core]" or "[Business Pillar — Futuristic Vision]".
+- DO NOT generate grim heavy industrial smokestacks, dark chemical pipes, shipping containers, or generic corporate office cafeterias.
 
 ${rules}
 ${contextSection}
@@ -2065,10 +2093,10 @@ Return ONLY a single valid JSON object:
 {
   "index": ${diegeticNumber},
   "diegeticNumber": ${diegeticNumber},
-  "concept": "Specific authentic industrial setting, specialized machine, or facility title matching ${brandName}",
-  "objectEmbedding": "specific high-contrast luminous or stark graphical carrier (e.g. illuminated LED/e-ink display / backlit stencil signage / stark white stencil on matte plate; NEVER bare dark metal cylinders or reflective metallic pipes)",
-  "revealMechanism": "Cinematic camera movement or natural obstacle clearing revealing numeral in center focus",
-  "videoPrompt": "Silent 4-second clip revealing the number \"${diegeticNumber}\". [Draft a concise 45-65 word Veo 3.1 prompt strictly adhering to the Core Visibility Rules from the guide: front-load the unpadded numeral '${diegeticNumber}' within the first 10 words, apply the 2x repetition rule, specify the exact reveal motion, pair with a high-contrast luminous/graphical carrier surface (no bare dark metal cylinders), and finish]."
+  "concept": "[Business Pillar — Modern Core / Futuristic Vision] Specific bright, domain-authentic setting or futuristic innovation matching ${brandName}",
+  "objectEmbedding": "specific high-contrast luminous or stark graphical carrier (e.g. illuminated LED/OLED display / crisp stencil on sleek fairing / dimensional biopolymer or alloy numeral; NEVER bare dark metal cylinders or reflective metallic pipes)",
+  "revealMechanism": "Slow, steady, controlled camera dolly or slider keeping numeral in tack-sharp center focus",
+  "videoPrompt": "Silent 4-second clip revealing the number \"${diegeticNumber}\". [Draft a concise 45-65 word Veo 3.1 prompt strictly adhering to the Core Visibility Rules from the guide: front-load the unpadded numeral '${diegeticNumber}' within the first 10 words, apply the 2x repetition rule, specify slow controlled camera motion, pair with a high-contrast luminous/graphical carrier surface in a bright, uplifting domain environment, and finish]."
 }`;
 
     if (key) {

@@ -70,6 +70,7 @@ export const ThemeInputForm: React.FC<ThemeInputFormProps> = ({
   const [brandName, setBrandName] = useState(initialBrandName);
   const [detectedBrand, setDetectedBrand] = useState<string | null>(null);
   const [businessSummary, setBusinessSummary] = useState<string | null>(null);
+  const [businessPillars, setBusinessPillars] = useState<string[]>([]);
   const [themeContext, setThemeContext] = useState(initialThemeContext);
   const [creatorLdap, setCreatorLdap] = useState(() => {
     try {
@@ -185,9 +186,12 @@ export const ThemeInputForm: React.FC<ThemeInputFormProps> = ({
       if (data.businessSummary) {
         setBusinessSummary(data.businessSummary);
       }
+      if (Array.isArray(data.businessPillars)) {
+        setBusinessPillars(data.businessPillars);
+      }
 
       setIdeasNotice(
-        '✨ Researched your brand & crafted 10 custom countdown scenes!'
+        '✨ Researched core business divisions & crafted 10 Modern + Futuristic scenes!'
       );
     } catch (err: any) {
       setIdeasError(
@@ -392,7 +396,7 @@ export const ThemeInputForm: React.FC<ThemeInputFormProps> = ({
 
           {/* Verified Domain Summary */}
           {(detectedBrand || businessSummary || ideasNotice) && (
-            <div className="p-3.5 rounded-2xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60 text-xs space-y-1.5 animate-fadeIn">
+            <div className="p-3.5 rounded-2xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60 text-xs space-y-2 animate-fadeIn">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
@@ -409,6 +413,21 @@ export const ThemeInputForm: React.FC<ThemeInputFormProps> = ({
                   {businessSummary}
                 </p>
               )}
+              {businessPillars.length > 0 && (
+                <div className="pl-6 pt-1 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-1">
+                    Core Business Pillars:
+                  </span>
+                  {businessPillars.map((pillar, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/80 dark:bg-slate-800/90 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700/60 shadow-2xs"
+                    >
+                      {pillar}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -417,7 +436,7 @@ export const ThemeInputForm: React.FC<ThemeInputFormProps> = ({
         <div className="space-y-1.5 pt-1">
           <div className="flex items-center justify-between mb-1">
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
-              <span>10 Visual Scenes & Substrates (Freely Editable)</span>
+              <span>10 Visual Scenes: Business Pillars × (Modern Core + Futuristic Vision)</span>
               {hasVisualIdeas && (
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-bold">
                   Ready
