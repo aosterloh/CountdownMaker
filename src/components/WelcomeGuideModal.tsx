@@ -7,6 +7,11 @@ import {
   ArrowRight,
   Tv,
   ExternalLink,
+  Image,
+  Bot,
+  RefreshCw,
+  CheckSquare,
+  Sparkle,
 } from 'lucide-react';
 
 interface WelcomeGuideModalProps {
@@ -60,10 +65,10 @@ export const WelcomeGuideModal: React.FC<WelcomeGuideModalProps> = ({
                 <span>Quick Tour</span>
               </div>
               <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                How Magic Countdown Works
+                How CountdownMaker Works
               </h2>
               <p className="text-xs sm:text-sm text-blue-100/90 mt-0.5">
-                Create a high-impact 30-second or 2-minute video in 3 simple steps
+                Prep high-impact customer meetings with countdown videos, 32:9 cinema visuals &amp; mascots
               </p>
             </div>
           </div>
@@ -77,70 +82,92 @@ export const WelcomeGuideModal: React.FC<WelcomeGuideModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Body: 3 Simple Steps */}
+        {/* Modal Body: Feature Guides */}
         <div className="p-6 sm:p-7 overflow-y-auto space-y-4 text-white">
-          {/* Step 1 */}
+          {/* Card 1: Intake & Selection */}
           <div className="p-4 sm:p-5 rounded-2xl bg-white/10 border border-white/15 hover:bg-white/15 transition-all flex gap-4 items-start">
             <div className="w-10 h-10 rounded-xl bg-white/20 border border-white/30 flex items-center justify-center shrink-0 font-extrabold text-base shadow-sm">
-              1
+              <Globe className="w-5 h-5 text-cyan-200" />
             </div>
-            <div className="space-y-1 text-left flex-1">
+            <div className="space-y-1.5 text-left flex-1">
               <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-cyan-200" />
+                <CheckSquare className="w-4 h-4 text-cyan-200" />
                 <h3 className="text-sm sm:text-base font-bold text-white">
-                  Enter Customer URL &amp; Live Research
+                  1. Enter Customer URL &amp; Select Features
                 </h3>
               </div>
               <p className="text-xs text-blue-100 leading-relaxed">
-                Paste the customer's website URL (e.g. <span className="font-mono bg-white/15 px-1.5 py-0.5 rounded text-white font-bold">madsack.de</span>). The app researches the company in real-time, extracts brand identity and corporate colors, then drafts 10 bespoke countdown concepts from 10 down to 1.
+                Paste any customer domain (e.g. <span className="font-mono bg-white/15 px-1.5 py-0.5 rounded text-white font-bold">lufthansa.com</span>, <span className="font-mono bg-white/15 px-1.5 py-0.5 rounded text-white font-bold">wimex-group.com</span>) and check any combination of the 3 meeting assets. Powered by <strong className="text-white font-semibold">Gemini 4 Argon</strong> with live Google Search grounding to automatically identify the customer's industry aesthetic, corporate brand colors, and official logo.
               </p>
             </div>
           </div>
 
-          {/* Step 2 */}
+          {/* Card 2: 32:9 Cinema Welcome Image */}
           <div className="p-4 sm:p-5 rounded-2xl bg-white/10 border border-white/15 hover:bg-white/15 transition-all flex gap-4 items-start">
-            <div className="w-10 h-10 rounded-xl bg-white/20 border border-white/30 flex items-center justify-center shrink-0 font-extrabold text-base shadow-sm">
-              2
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/40 to-blue-500/40 border border-white/30 flex items-center justify-center shrink-0 font-extrabold text-base shadow-sm">
+              <Image className="w-5 h-5 text-indigo-200" />
             </div>
-            <div className="space-y-1 text-left flex-1">
+            <div className="space-y-1.5 text-left flex-1">
               <div className="flex items-center gap-2">
-                <Film className="w-4 h-4 text-amber-200" />
+                <span className="px-2 py-0.5 rounded bg-indigo-500/30 border border-indigo-300/40 text-[10px] font-black uppercase text-indigo-100">
+                  Cinema 32:9
+                </span>
                 <h3 className="text-sm sm:text-base font-bold text-white">
-                  Generate &amp; Perfect 10 Scenes
+                  2. 4K Ultra-Wide Cinema Welcome Graphic
                 </h3>
               </div>
               <p className="text-xs text-blue-100 leading-relaxed">
-                Batch-generate 10 cinematic motion scenes. You have full creative control: adjust direction, customize visual styles, and generate new takes for any scene until every countdown number looks flawless.
+                Rendered with <strong className="text-white font-semibold">Gemini Nano Banana 2.1</strong> in native 4K ultra-wide (32:9) aspect ratio, purpose-built for our cinema screen. It crafts an authentic environment specific to the customer's industry (e.g. futuristic flight deck for aviation, high-tech hydroponic facility for agriculture). Need another angle? Click the convenient <span className="font-semibold text-white inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded text-[11px]"><RefreshCw className="w-3 h-3" /> Redo</span> pill anytime.
               </p>
             </div>
           </div>
 
-          {/* Step 3 */}
+          {/* Card 3: Bugdroid Mascot */}
           <div className="p-4 sm:p-5 rounded-2xl bg-white/10 border border-white/15 hover:bg-white/15 transition-all flex gap-4 items-start">
-            <div className="w-10 h-10 rounded-xl bg-white/20 border border-white/30 flex items-center justify-center shrink-0 font-extrabold text-base shadow-sm">
-              3
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/40 to-teal-500/40 border border-white/30 flex items-center justify-center shrink-0 font-extrabold text-base shadow-sm">
+              <Bot className="w-5 h-5 text-emerald-200" />
             </div>
-            <div className="space-y-1 text-left flex-1">
+            <div className="space-y-1.5 text-left flex-1">
               <div className="flex items-center gap-2">
-                <Tv className="w-4 h-4 text-emerald-200" />
+                <span className="px-2 py-0.5 rounded bg-emerald-500/30 border border-emerald-300/40 text-[10px] font-black uppercase text-emerald-100">
+                  Mascot
+                </span>
                 <h3 className="text-sm sm:text-base font-bold text-white">
-                  Export Your Final Cut & Full Video
+                  3. Branded Bugdroid in Industry Outfit
                 </h3>
               </div>
               <p className="text-xs text-blue-100 leading-relaxed">
-                Choose between the standalone <strong className="text-white font-bold">30-second countdown video</strong> (timed to high-tempo music with a dramatic 1-second drop pause) or the full <strong className="text-white font-bold">2-minute extended version</strong> featuring the inspirational 90-second{' '}
-                <a
-                  href="https://www.youtube.com/watch?v=wYSncx9zLIU"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:text-white font-bold inline-flex items-center gap-0.5 text-white/95"
-                >
-                  <span>Event Opening Video</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-                . Export instantly in Fast Preview or Studio 4K Ultra HD.
+                Creates a cute 3D Bugdroid against a sleek dark studio backdrop wearing a crisp white T-shirt featuring the customer's logo. The Bugdroid can appear plain or accessorized in company workwear (e.g. pilot cap, farmer overalls, engineer hardhat). Includes a 1-click <span className="font-semibold text-white inline-flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded text-[11px]"><RefreshCw className="w-3 h-3" /> Redo</span> pill for rapid variations.
               </p>
             </div>
+          </div>
+
+          {/* Card 4: 30s Countdown Video & Keynote Opener */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/10 border border-white/15 hover:bg-white/15 transition-all flex gap-4 items-start">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/40 to-orange-500/40 border border-white/30 flex items-center justify-center shrink-0 font-extrabold text-base shadow-sm">
+              <Film className="w-5 h-5 text-amber-200" />
+            </div>
+            <div className="space-y-1.5 text-left flex-1">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-amber-500/30 border border-amber-300/40 text-[10px] font-black uppercase text-amber-100">
+                  Video 4K
+                </span>
+                <h3 className="text-sm sm:text-base font-bold text-white">
+                  4. 30s Countdown Video (Veo 3.1) &amp; Event Opener
+                </h3>
+              </div>
+              <p className="text-xs text-blue-100 leading-relaxed">
+                Synthesizes 10 diegetic scenes with countdown numbers (10 down to 1) integrated naturally into the environment. Synced to high-energy golden beat audio with a dramatic 1-second drop pause on #1 right before the keynote starts. Export standalone 30s cuts or the full 2-minute extended version with the inspirational AI film.
+              </p>
+            </div>
+          </div>
+
+          {/* Pro-Tip: Multi-Tab Workflows */}
+          <div className="p-3.5 rounded-2xl bg-black/20 border border-white/10 flex items-center gap-3">
+            <Sparkle className="w-4 h-4 text-cyan-300 shrink-0" />
+            <p className="text-[11px] sm:text-xs text-blue-100 leading-relaxed">
+              <strong className="text-white">Pro Tip:</strong> Preparing multiple customer meetings simultaneously? The customer name is dynamically pinned in the screen header and the browser tab title (<span className="font-mono text-cyan-200">&lt;Customer&gt; - Meeting Prep Studio</span>) so you never lose track.
+            </p>
           </div>
         </div>
 

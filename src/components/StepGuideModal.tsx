@@ -29,21 +29,26 @@ interface StepInfo {
 const STEP_DATA: Record<StepGuideId, StepInfo> = {
   'step-1': {
     stepBadge: 'Step 1 of 6',
-    title: 'Brand Discovery & 10 Countdown Scenes',
-    subtitle: 'Researching your customer’s website to craft authentic visual scenes',
+    title: 'Brand Discovery & Meeting Assets',
+    subtitle: 'Researching your customer’s website to craft authentic visual scenes, cinema graphics & mascots',
     icon: <Globe className="w-6 h-6 text-cyan-200" />,
     overview:
-      'The generator scans your customer’s live website to understand their brand identity, colors, and industry aesthetic. It then designs 10 custom scene concepts counting down from 10 to 1.',
+      'The generator uses Gemini 4 Argon with live Google Search grounding to scan the customer’s website, understand their brand identity, colors, logo, and industry aesthetic. It produces your chosen meeting assets: 30s countdown scenes, 4K 32:9 cinema backdrops, and branded Bugdroid mascots.',
     decisions: [
       {
-        title: 'Customer Website',
+        title: 'Customer Website & Feature Checkboxes',
         description:
-          'Enter the customer’s domain (e.g. madsack.de) and any event theme or kickoff notes.',
+          'Enter the customer’s domain (e.g. lufthansa.com, wimex-group.com) and check any combination of the 3 meeting features.',
       },
       {
-        title: 'Review 10 Scenes',
+        title: '32:9 Cinema Visual & Bugdroid Mascot',
         description:
-          'Preview the countdown concepts. You can customize any scene idea before video generation begins.',
+          'Instant 4K ultra-wide graphics and cute mascots in company workwear generated with Gemini Nano Banana 2.1, with 1-click Redo buttons.',
+      },
+      {
+        title: 'Review 10 Countdown Scenes',
+        description:
+          'Preview and customize the 10 diegetic countdown concepts (10 down to 1) before synthesizing video with Google Veo 3.1.',
       },
     ],
   },

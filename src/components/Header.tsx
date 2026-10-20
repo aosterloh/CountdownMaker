@@ -209,7 +209,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
-              <span>Magic Countdown Generator</span>
+              <span>Countdown Maker</span>
               {brandName && brandName.trim() && (
                 <span className="px-3 py-0.5 text-xs font-black rounded-full bg-gradient-to-r from-purple-500/15 via-indigo-500/15 to-blue-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30 flex items-center gap-1.5 shadow-sm">
                   <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
@@ -222,7 +222,7 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={onOpenWelcomeGuide}
                 className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-blue-600 hover:bg-blue-700 text-white border border-blue-500 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95"
-                title="Show 3-step guide: How Magic Countdown works"
+                title="Show guide: How Countdown Maker works"
               >
                 <HelpCircle className="w-3.5 h-3.5 text-white" />
                 <span>How It Works</span>
@@ -230,7 +230,7 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            30-Second Cinematic Countdown Generator · Created by{' '}
+            Customer Meeting Prep Studio: 30s Countdowns, 32:9 Cinema Photos &amp; Mascots · Created by{' '}
             <a
               href="https://moma.corp.google.com/person/aosterloh"
               target="_blank"

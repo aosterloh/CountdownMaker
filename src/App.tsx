@@ -2634,7 +2634,7 @@ export const App: React.FC = () => {
       {/* Lower Right GitHub Project Link */}
       <div className="fixed bottom-4 right-4 z-30">
         <a
-          href="https://github.com/aosterloh/magic-countdown-generator"
+          href="https://github.com/aosterloh/CountdownMaker"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/80 hover:bg-slate-900 dark:bg-slate-800/80 dark:hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 text-[11px] font-semibold backdrop-blur-md shadow-lg transition-all hover:scale-105 active:scale-95 group"
