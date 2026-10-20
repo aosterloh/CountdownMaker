@@ -21,6 +21,7 @@ import {
   Bot,
   Monitor,
   Maximize2,
+  Mic,
 } from 'lucide-react';
 import { CountdownSlot, VeoQueueStatus } from '../types';
 import { getMediaUrl } from '../utils/media';
@@ -43,14 +44,20 @@ interface ExpressDirectorViewProps {
   onIncludeCountdownVideoChange: (val: boolean) => void;
 
   // Deliverables State
+  isAnalyzingBrand?: boolean;
   cinemaWallpaperUri: string | null;
-  bugdroidMascotUri: string | null;
+  wallpaperPillars?: Array<{ division: string; prompt: string }>;
+  currentPillarIndex?: number;
+  bugdroidMascotUri: string | null; // Worker
+  bugdroidSpeakerUri?: string | null; // Keynote Speaker
   isGeneratingWallpaper: boolean;
   isGeneratingBugdroid: boolean;
+  isGeneratingSpeakerBugdroid?: boolean;
   wallpaperError?: string | null;
   bugdroidError?: string | null;
+  speakerBugdroidError?: string | null;
   onRedoWallpaper: () => Promise<void>;
-  onRedoBugdroid: () => Promise<void>;
+  onRedoBugdroid: (type?: 'worker' | 'speaker') => Promise<void>;
 
   // Countdown Video State
   isGeneratingPrompts: boolean;
@@ -90,12 +97,18 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
   onIncludeBugdroidMascotChange,
   includeCountdownVideo,
   onIncludeCountdownVideoChange,
+  isAnalyzingBrand = false,
   cinemaWallpaperUri,
+  wallpaperPillars = [],
+  currentPillarIndex = 0,
   bugdroidMascotUri,
+  bugdroidSpeakerUri = null,
   isGeneratingWallpaper,
   isGeneratingBugdroid,
+  isGeneratingSpeakerBugdroid = false,
   wallpaperError,
   bugdroidError,
+  speakerBugdroidError = null,
   onRedoWallpaper,
   onRedoBugdroid,
   isGeneratingPrompts,
@@ -130,13 +143,21 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
     isExportingExtendedMaster ||
     isUploadingYouTube;
 
-  const isAnyActive = isVideoPipelineActive || isGeneratingWallpaper || isGeneratingBugdroid;
+  const isAnyActive =
+    isAnalyzingBrand ||
+    isVideoPipelineActive ||
+    isGeneratingWallpaper ||
+    isGeneratingBugdroid ||
+    isGeneratingSpeakerBugdroid;
 
   const finalVideoUri = extended4kUri || master4kUri;
 
   // Determine if deliverables are ready to display
   const hasAnyDeliverableReady = Boolean(
-    cinemaWallpaperUri || bugdroidMascotUri || (includeCountdownVideo && finalVideoUri)
+    cinemaWallpaperUri ||
+    bugdroidMascotUri ||
+    bugdroidSpeakerUri ||
+    (includeCountdownVideo && finalVideoUri)
   );
 
   const isVideoReady = Boolean(finalVideoUri) && !isVideoPipelineActive;
@@ -247,8 +268,8 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
         </p>
       </div>
 
-      {/* STATE 1: DELIVERABLES HUB (WHEN ASSETS ARE GENERATED OR READY) */}
-      {hasAnyDeliverableReady && (
+      {/* STATE 1: DELIVERABLES HUB (WHEN ASSETS ARE GENERATED OR READY, OR GENERATION IS ACTIVE) */}
+      {(hasAnyDeliverableReady || isAnyActive) && (
         <div className="space-y-6">
           {/* Top Deliverables Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl">
@@ -261,15 +282,20 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                   <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                     {displayBrand ? `${displayBrand} Executive Deliverables` : 'Executive Deliverables'}
                   </h3>
-                  {isAllSelectedReady && (
+                  {isAllSelectedReady ? (
                     <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
                       READY
                     </span>
-                  )}
+                  ) : isAnyActive ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30 animate-pulse flex items-center gap-1.5">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>GENERATING</span>
+                    </span>
+                  ) : null}
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {industry ? <span className="font-semibold text-purple-600 dark:text-purple-400 mr-1.5">{industry} •</span> : null}
-                  Prepared for cinema screen display, executive slide deck, and meeting presentation.
+                  Prepared for cinema screen display, executive slide deck, and keynote presentation.
                 </p>
               </div>
             </div>
@@ -292,31 +318,41 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                     <Monitor className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
                         1. 32:9 Cinema Welcome Wallpaper
                       </h4>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30">
                         3840×1080 4K
                       </span>
+                      {wallpaperPillars && wallpaperPillars.length > 0 && wallpaperPillars[currentPillarIndex % wallpaperPillars.length] && (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
+                          Division: {wallpaperPillars[currentPillarIndex % wallpaperPillars.length].division}
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Ultra-wide panoramic format tailored for the cinema 32:9 display screen.
+                      {wallpaperPillars && wallpaperPillars.length > 1 && (
+                        <span className="ml-1 text-purple-600 dark:text-purple-400 font-semibold">
+                          (Pillar {(currentPillarIndex % wallpaperPillars.length) + 1} of {wallpaperPillars.length})
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
 
                 {/* Redo Wallpaper Pill */}
-                {cinemaWallpaperUri && (
+                {(cinemaWallpaperUri || isGeneratingWallpaper) && (
                   <button
                     type="button"
                     onClick={onRedoWallpaper}
-                    disabled={isGeneratingWallpaper}
+                    disabled={isGeneratingWallpaper || isAnalyzingBrand}
                     className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-slate-700 dark:text-slate-300 hover:text-purple-600 dark:hover:text-purple-400 border border-slate-200 dark:border-slate-700 hover:border-purple-500/30 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
-                    title="Regenerate 32:9 wallpaper with a fresh AI prompt variation"
+                    title="Rotate to another customer business area & fresh creative theme"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingWallpaper ? 'animate-spin text-purple-500' : ''}`} />
-                    <span>{isGeneratingWallpaper ? 'Generating Wallpaper...' : '🔄 Redo Wallpaper'}</span>
+                    <span>{isGeneratingWallpaper ? 'Generating Division...' : '🔄 Redo (Try Another Business Division)'}</span>
                   </button>
                 )}
               </div>
@@ -345,14 +381,16 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                       </a>
                     </div>
                   </>
-                ) : isGeneratingWallpaper ? (
+                ) : isGeneratingWallpaper || isAnalyzingBrand ? (
                   <div className="flex flex-col items-center justify-center p-6 text-center space-y-2">
                     <RefreshCw className="w-8 h-8 text-purple-500 animate-spin" />
                     <p className="text-xs font-bold text-slate-300">
-                      Synthesizing 4K 32:9 Cinema Wallpaper with Nano Banana 2.1 (4K)...
+                      {isAnalyzingBrand
+                        ? 'Gemini 4 Argon discovering visionary business pillars...'
+                        : 'Synthesizing 4K 32:9 Cinema Wallpaper with Nano Banana 2.1 (4K)...'}
                     </p>
                     <span className="text-[11px] text-slate-500">
-                      Cinematic wide-angle photography tailored to client industry
+                      Ultra-wide cinematic composition • Optimistic forward-facing business division
                     </span>
                   </div>
                 ) : wallpaperError ? (
@@ -388,7 +426,7 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
             </div>
           )}
 
-          {/* DELIVERABLE CARD 2: CUTE BUGDROID MASCOT ON BLACK */}
+          {/* DELIVERABLE CARD 2: DUAL CUTE BUGDROID MASCOTS ON BLACK */}
           {includeBugdroidMascot && (
             <div className="bg-white dark:bg-slate-900 border-2 border-indigo-500/30 dark:border-indigo-500/20 rounded-3xl p-6 sm:p-8 shadow-xl space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
@@ -399,94 +437,190 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                   <div>
                     <div className="flex items-center gap-2">
                       <h4 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                        2. Cute Bugdroid Mascot on Pure Black (#000000)
+                        2. Dual Cute Bugdroid Mascots on Pure Black (#000000)
                       </h4>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
-                        White Logo Shirt
+                        Worker + Keynote Speaker
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      3D Android Bugdroid on black background wearing a white t-shirt with customer logo.
+                      3D Android Bugdroids wearing customer logo white T-shirts: Company Worker attire and Keynote Speaker with Google-branded mic.
                     </p>
                   </div>
                 </div>
-
-                {/* Redo Bugdroid Pill */}
-                {bugdroidMascotUri && (
-                  <button
-                    type="button"
-                    onClick={onRedoBugdroid}
-                    disabled={isGeneratingBugdroid}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 hover:border-indigo-500/30 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
-                    title="Regenerate Bugdroid mascot with a fresh AI variation"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingBugdroid ? 'animate-spin text-indigo-500' : ''}`} />
-                    <span>{isGeneratingBugdroid ? 'Rendering Mascot...' : '🔄 Redo Mascot'}</span>
-                  </button>
-                )}
               </div>
 
-              {/* Bugdroid Preview Container (Solid Black Box) */}
-              <div className="bg-black rounded-2xl overflow-hidden shadow-2xl relative border border-slate-800 flex items-center justify-center p-4 min-h-[300px] sm:min-h-[380px] group">
-                {bugdroidMascotUri ? (
-                  <div className="relative max-w-sm w-full aspect-square flex items-center justify-center">
-                    <img
-                      src={getMediaUrl(bugdroidMascotUri)}
-                      alt="Bugdroid Mascot"
-                      className="max-h-full max-w-full object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)]"
-                    />
-                    <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <a
-                        href={getMediaUrl(bugdroidMascotUri)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 rounded-xl bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm transition-colors flex items-center"
-                        title="View Full Resolution"
-                      >
-                        <Maximize2 className="w-4 h-4" />
-                      </a>
+              {/* 2-Column Grid for Dual Bugdroids */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Bugdroid 1: Authentic Company Worker */}
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-3 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30">
+                        1. Company Worker
+                      </span>
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Workwear &amp; Logo T-Shirt
+                      </span>
                     </div>
+                    {bugdroidMascotUri && (
+                      <button
+                        type="button"
+                        onClick={() => onRedoBugdroid('worker')}
+                        disabled={isGeneratingBugdroid}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-indigo-500/30 hover:text-indigo-600 shadow-sm cursor-pointer disabled:opacity-50"
+                        title="Regenerate worker mascot"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isGeneratingBugdroid ? 'animate-spin text-indigo-500' : ''}`} />
+                        <span>Redo</span>
+                      </button>
+                    )}
                   </div>
-                ) : isGeneratingBugdroid ? (
-                  <div className="flex flex-col items-center justify-center p-6 text-center space-y-2">
-                    <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
-                    <p className="text-xs font-bold text-slate-300">
-                      Rendering 3D Bugdroid Mascot with customer logo on white t-shirt...
-                    </p>
-                    <span className="text-[11px] text-slate-500">
-                      Solid black backing (#000000) • Pixar-quality studio lighting
-                    </span>
-                  </div>
-                ) : bugdroidError ? (
-                  <div className="p-4 text-center text-xs text-rose-400 space-y-2">
-                    <AlertCircle className="w-6 h-6 mx-auto text-rose-500" />
-                    <p>{bugdroidError}</p>
-                    <button
-                      type="button"
-                      onClick={onRedoBugdroid}
-                      className="px-3 py-1 rounded-lg bg-rose-600 text-white text-xs font-bold"
-                    >
-                      Retry Bugdroid
-                    </button>
-                  </div>
-                ) : (
-                  <span className="text-xs text-slate-500">Mascot queued for rendering...</span>
-                )}
-              </div>
 
-              {/* Download Bugdroid Button */}
-              {bugdroidMascotUri && (
-                <div className="flex justify-end pt-1">
-                  <a
-                    href={getMediaUrl(bugdroidMascotUri)}
-                    download={`bugdroid_mascot_${(displayBrand || 'client').toLowerCase().replace(/[^a-z0-9]/g, '_')}.png`}
-                    className="py-3 px-5 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-extrabold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-indigo-500/20 transition-all cursor-pointer"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>Download Branded Bugdroid Mascot (.png)</span>
-                  </a>
+                  {/* Image Container */}
+                  <div className="bg-black rounded-xl overflow-hidden relative border border-slate-800 flex items-center justify-center p-3 aspect-square group">
+                    {bugdroidMascotUri ? (
+                      <>
+                        <img
+                          src={getMediaUrl(bugdroidMascotUri)}
+                          alt="Worker Bugdroid Mascot"
+                          className="max-h-full max-w-full object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)]"
+                        />
+                        <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <a
+                            href={getMediaUrl(bugdroidMascotUri)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm transition-colors flex items-center"
+                            title="View Full Resolution"
+                          >
+                            <Maximize2 className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      </>
+                    ) : isGeneratingBugdroid || isAnalyzingBrand ? (
+                      <div className="flex flex-col items-center justify-center p-4 text-center space-y-2">
+                        <RefreshCw className="w-6 h-6 text-indigo-500 animate-spin" />
+                        <p className="text-xs font-bold text-slate-300">
+                          {isAnalyzingBrand ? 'Researching attire...' : 'Rendering Worker Mascot...'}
+                        </p>
+                        <span className="text-[10px] text-slate-500">Pure black background (#000000)</span>
+                      </div>
+                    ) : bugdroidError ? (
+                      <div className="p-3 text-center text-xs text-rose-400 space-y-1">
+                        <AlertCircle className="w-5 h-5 mx-auto text-rose-500" />
+                        <p className="text-[11px]">{bugdroidError}</p>
+                        <button
+                          type="button"
+                          onClick={() => onRedoBugdroid('worker')}
+                          className="px-2.5 py-0.5 rounded bg-rose-600 text-white text-[11px] font-bold"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-500">Queued for rendering...</span>
+                    )}
+                  </div>
+
+                  {/* Download Worker */}
+                  {bugdroidMascotUri && (
+                    <a
+                      href={getMediaUrl(bugdroidMascotUri)}
+                      download={`bugdroid_worker_${(displayBrand || 'client').toLowerCase().replace(/[^a-z0-9]/g, '_')}.png`}
+                      className="w-full py-2 px-3 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-indigo-600 hover:text-white text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download Worker Mascot (.png)</span>
+                    </a>
+                  )}
                 </div>
-              )}
+
+                {/* Bugdroid 2: Keynote Speaker with Google Microphone */}
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-3 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 flex items-center gap-1">
+                        <Mic className="w-3 h-3 text-[#4285F4]" />
+                        <span>2. Keynote Speaker</span>
+                      </span>
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Google Mic &amp; Logo T-Shirt
+                      </span>
+                    </div>
+                    {bugdroidSpeakerUri && (
+                      <button
+                        type="button"
+                        onClick={() => onRedoBugdroid('speaker')}
+                        disabled={isGeneratingSpeakerBugdroid}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-blue-500/30 hover:text-blue-600 shadow-sm cursor-pointer disabled:opacity-50"
+                        title="Regenerate keynote speaker mascot"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isGeneratingSpeakerBugdroid ? 'animate-spin text-blue-500' : ''}`} />
+                        <span>Redo</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Image Container */}
+                  <div className="bg-black rounded-xl overflow-hidden relative border border-slate-800 flex items-center justify-center p-3 aspect-square group">
+                    {bugdroidSpeakerUri ? (
+                      <>
+                        <img
+                          src={getMediaUrl(bugdroidSpeakerUri)}
+                          alt="Keynote Speaker Bugdroid Mascot"
+                          className="max-h-full max-w-full object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)]"
+                        />
+                        <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <a
+                            href={getMediaUrl(bugdroidSpeakerUri)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm transition-colors flex items-center"
+                            title="View Full Resolution"
+                          >
+                            <Maximize2 className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      </>
+                    ) : isGeneratingSpeakerBugdroid || isAnalyzingBrand ? (
+                      <div className="flex flex-col items-center justify-center p-4 text-center space-y-2">
+                        <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
+                        <p className="text-xs font-bold text-slate-300">
+                          {isAnalyzingBrand ? 'Preparing keynote speaker...' : 'Rendering Keynote Speaker Mascot...'}
+                        </p>
+                        <span className="text-[10px] text-slate-500">Google-branded microphone • Pure black backing</span>
+                      </div>
+                    ) : speakerBugdroidError ? (
+                      <div className="p-3 text-center text-xs text-rose-400 space-y-1">
+                        <AlertCircle className="w-5 h-5 mx-auto text-rose-500" />
+                        <p className="text-[11px]">{speakerBugdroidError}</p>
+                        <button
+                          type="button"
+                          onClick={() => onRedoBugdroid('speaker')}
+                          className="px-2.5 py-0.5 rounded bg-rose-600 text-white text-[11px] font-bold"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-500">Queued for rendering...</span>
+                    )}
+                  </div>
+
+                  {/* Download Speaker */}
+                  {bugdroidSpeakerUri && (
+                    <a
+                      href={getMediaUrl(bugdroidSpeakerUri)}
+                      download={`bugdroid_speaker_${(displayBrand || 'client').toLowerCase().replace(/[^a-z0-9]/g, '_')}.png`}
+                      className="w-full py-2 px-3 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-blue-600 hover:text-white text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download Keynote Speaker Mascot (.png)</span>
+                    </a>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -623,7 +757,9 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                       </span>
                     )}
                     <span>
-                      {isVideoPipelineActive
+                      {isAnalyzingBrand
+                        ? 'Researching Domain & Discovering Creative Pillars via Gemini 4 Argon'
+                        : isVideoPipelineActive
                         ? activePhase === 'prompts'
                           ? 'Analyzing Brand & Scripting Deliverables'
                           : activePhase === 'videos'
@@ -633,11 +769,11 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                           : activePhase === 'youtube'
                           ? 'Uploading 4K Cut to YouTube'
                           : 'Generating Customer Deliverables'
-                        : isGeneratingWallpaper && isGeneratingBugdroid
-                        ? 'Synthesizing 32:9 Wallpaper & Bugdroid Mascot'
+                        : isGeneratingWallpaper && (isGeneratingBugdroid || isGeneratingSpeakerBugdroid)
+                        ? 'Synthesizing 32:9 Wallpaper & Dual Bugdroid Mascots'
                         : isGeneratingWallpaper
                         ? 'Synthesizing 4K 32:9 Cinema Wallpaper'
-                        : 'Rendering Cute Bugdroid Mascot'}
+                        : 'Rendering Cute Bugdroid Mascots'}
                     </span>
                   </h3>
                 </div>
@@ -884,14 +1020,14 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                 <div>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <h4 className="text-xs font-black text-slate-900 dark:text-white">
-                      Cute Bugdroid Mascot
+                      Dual Bugdroid Mascots
                     </h4>
                     <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
-                      Black #000000
+                      Worker + Google Mic
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
-                    3D Bugdroid on black background with white t-shirt featuring customer logo &amp; worker attire.
+                    Company Worker attire + Keynote Speaker holding Google-branded microphone on solid black.
                   </p>
                 </div>
               </label>
@@ -1001,19 +1137,28 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
           <button
             type="button"
             onClick={onStartAutopilot}
-            disabled={!companyUrl.trim() || selectedCount === 0}
+            disabled={!companyUrl.trim() || selectedCount === 0 || isAnalyzingBrand}
             className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-black text-base sm:text-lg flex items-center justify-center gap-2 shadow-xl shadow-purple-500/25 transition-all transform active:scale-[0.98] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <Sparkles className="w-5 h-5 text-amber-300 fill-amber-300" />
-            <span>
-              {selectedCount === 3
-                ? 'Generate Customer Meeting Package (3 Deliverables)'
-                : selectedCount === 2
-                ? 'Generate Meeting Package (2 Deliverables)'
-                : selectedCount === 1
-                ? `Generate ${includeCinemaWallpaper ? '32:9 Wallpaper' : includeBugdroidMascot ? 'Bugdroid Mascot' : '4K Countdown Video'}`
-                : 'Select At Least 1 Deliverable'}
-            </span>
+            {isAnalyzingBrand ? (
+              <>
+                <RefreshCw className="w-5 h-5 animate-spin text-white" />
+                <span>Researching Brand with Gemini 4 Argon...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-5 h-5 text-amber-300 fill-amber-300" />
+                <span>
+                  {selectedCount === 3
+                    ? 'Generate Customer Meeting Package (3 Deliverables)'
+                    : selectedCount === 2
+                    ? 'Generate Meeting Package (2 Deliverables)'
+                    : selectedCount === 1
+                    ? `Generate ${includeCinemaWallpaper ? '32:9 Wallpaper' : includeBugdroidMascot ? 'Dual Bugdroid Mascots' : '4K Countdown Video'}`
+                    : 'Select At Least 1 Deliverable'}
+                </span>
+              </>
+            )}
           </button>
         </div>
       )}

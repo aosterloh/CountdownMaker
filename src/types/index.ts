@@ -223,16 +223,29 @@ export interface CustomerMeetingPackageConfig {
   includeCountdownVideo: boolean;
 }
 
+export interface WallpaperPillar {
+  division: string;
+  prompt: string;
+}
+
 export interface CustomerMeetingDeliverables {
   brandName?: string;
   industry?: string;
   businessSummary?: string;
   cinemaWallpaperUri?: string | null;
   cinemaWallpaperPrompt?: string;
+  wallpaperPillars?: WallpaperPillar[];
+  currentPillarIndex?: number;
   isGeneratingWallpaper?: boolean;
   wallpaperError?: string | null;
   bugdroidMascotUri?: string | null;
+  bugdroidWorkerUri?: string | null;
+  bugdroidSpeakerUri?: string | null;
+  bugdroidWorkerPrompt?: string;
+  bugdroidSpeakerPrompt?: string;
   bugdroidMascotPrompt?: string;
   isGeneratingBugdroid?: boolean;
+  isGeneratingSpeakerBugdroid?: boolean;
   bugdroidError?: string | null;
+  speakerBugdroidError?: string | null;
 }

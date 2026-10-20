@@ -35,6 +35,45 @@ describe('Customer Meeting Package Architecture', () => {
     expect(prompt).toContain('Agriculture & Farming');
   });
 
+  it('validates Keynote Speaker Bugdroid mascot prompt with Google-branded microphone', () => {
+    const brand = 'BASF';
+    const prompt = `A 3D render of a cute Android Bugdroid character standing centered on a solid pure black background (#000000). The Bugdroid is ready to present as a keynote speaker, holding a sleek modern Google-branded microphone with colorful Google accents. The Bugdroid is wearing a clean crisp white t-shirt with the official ${brand} logo printed crisply in the center of the chest. High resolution 3D digital art, Pixar-quality studio lighting, sharp details, centered 1:1 square composition.`;
+
+    expect(prompt).toContain('#000000');
+    expect(prompt).toContain('Google-branded microphone');
+    expect(prompt).toContain('keynote speaker');
+    expect(prompt).toContain('BASF');
+    expect(prompt).toContain('white t-shirt');
+  });
+
+  it('cycles through multiple creative business pillars on wallpaper redo', () => {
+    const pillars = [
+      { division: 'Precision Agriculture', prompt: 'Prompt 1' },
+      { division: 'Clean Energy & Battery Materials', prompt: 'Prompt 2' },
+      { division: 'Bioscience Greenhouses', prompt: 'Prompt 3' },
+      { division: 'Circular Biopolymers', prompt: 'Prompt 4' },
+    ];
+
+    let currentIndex = 0;
+    expect(pillars[currentIndex].division).toBe('Precision Agriculture');
+
+    // First redo
+    currentIndex = (currentIndex + 1) % pillars.length;
+    expect(pillars[currentIndex].division).toBe('Clean Energy & Battery Materials');
+
+    // Second redo
+    currentIndex = (currentIndex + 1) % pillars.length;
+    expect(pillars[currentIndex].division).toBe('Bioscience Greenhouses');
+
+    // Third redo
+    currentIndex = (currentIndex + 1) % pillars.length;
+    expect(pillars[currentIndex].division).toBe('Circular Biopolymers');
+
+    // Fourth redo wraps around to 0
+    currentIndex = (currentIndex + 1) % pillars.length;
+    expect(pillars[currentIndex].division).toBe('Precision Agriculture');
+  });
+
   it('allows independent deliverable checkbox selection', () => {
     const configAll = {
       includeCinemaWallpaper: true,

@@ -32,7 +32,7 @@ import { PromptGuideModal } from './components/PromptGuideModal';
 import { RecentMastersCarousel } from './components/RecentMastersCarousel';
 import { WelcomeGuideModal } from './components/WelcomeGuideModal';
 import { StepGuideModal, StepGuideId } from './components/StepGuideModal';
-import { CountdownSlot, ImageModelType, VeoModelType, AuthMode, SlotTemporalConfig, VideoQualityMode, UpscaleEngineType, JobSummary, VeoQueueStatus, GroundingMetadata, RenderMetrics } from './types';
+import { CountdownSlot, ImageModelType, VeoModelType, AuthMode, SlotTemporalConfig, VideoQualityMode, UpscaleEngineType, JobSummary, VeoQueueStatus, GroundingMetadata, RenderMetrics, WallpaperPillar } from './types';
 import { UNIVERSAL_STYLE_ANCHOR } from './utils/promptBuilder';
 import { calculateTimelineOffsets, getDefaultTemporalConfigForSlot } from './utils/temporalMath';
 import { playPromptChime, playStepSuccessChime, playGrandFinaleChime, setSoundEnabled as setAudioSoundEnabled } from './utils/audioChimes';
@@ -226,13 +226,8 @@ export const App: React.FC = () => {
 
 
   // Director Mode: 'express' (1-click autonomous autopilot) vs 'expert' (deep granular control)
-  const [directorMode, setDirectorMode] = useState<'express' | 'expert'>(() => {
-    try {
-      const saved = localStorage.getItem('countdown_director_mode');
-      if (saved === 'expert' || saved === 'express') return saved;
-    } catch {}
-    return 'express';
-  });
+  // Default to 'express' on every fresh visit so Customer Meeting Package generator is prominently on top
+  const [directorMode, setDirectorMode] = useState<'express' | 'expert'>('express');
 
   const handleDirectorModeChange = (mode: 'express' | 'expert') => {
     setDirectorMode(mode);
@@ -284,15 +279,27 @@ export const App: React.FC = () => {
   const [includeBugdroidMascot, setIncludeBugdroidMascot] = useState<boolean>(true);
   const [includeCountdownVideo, setIncludeCountdownVideo] = useState<boolean>(true);
 
+  // Live Grounded Research State (Gemini 4 Argon)
+  const [isAnalyzingBrand, setIsAnalyzingBrand] = useState<boolean>(false);
+
+  // Deliverable 1: 32:9 Cinema Wallpaper (Multi-Pillar Creative Exploration)
   const [cinemaWallpaperUri, setCinemaWallpaperUri] = useState<string | null>(null);
-  const [bugdroidMascotUri, setBugdroidMascotUri] = useState<string | null>(null);
+  const [wallpaperPillars, setWallpaperPillars] = useState<WallpaperPillar[]>([]);
+  const [currentPillarIndex, setCurrentPillarIndex] = useState<number>(0);
   const [isGeneratingWallpaper, setIsGeneratingWallpaper] = useState<boolean>(false);
-  const [isGeneratingBugdroid, setIsGeneratingBugdroid] = useState<boolean>(false);
   const [wallpaperError, setWallpaperError] = useState<string | null>(null);
-  const [bugdroidError, setBugdroidError] = useState<string | null>(null);
   const [customerIndustry, setCustomerIndustry] = useState<string>('');
   const [wallpaperPrompt, setWallpaperPrompt] = useState<string>('');
-  const [bugdroidPrompt, setBugdroidPrompt] = useState<string>('');
+
+  // Deliverable 2: Dual Bugdroids (1. Company Worker + 2. Keynote Speaker with Google Mic)
+  const [bugdroidMascotUri, setBugdroidMascotUri] = useState<string | null>(null); // Worker
+  const [bugdroidSpeakerUri, setBugdroidSpeakerUri] = useState<string | null>(null); // Keynote Speaker
+  const [isGeneratingBugdroid, setIsGeneratingBugdroid] = useState<boolean>(false); // Worker
+  const [isGeneratingSpeakerBugdroid, setIsGeneratingSpeakerBugdroid] = useState<boolean>(false); // Speaker
+  const [bugdroidError, setBugdroidError] = useState<string | null>(null);
+  const [speakerBugdroidError, setSpeakerBugdroidError] = useState<string | null>(null);
+  const [bugdroidPrompt, setBugdroidPrompt] = useState<string>(''); // Worker prompt
+  const [bugdroidSpeakerPrompt, setBugdroidSpeakerPrompt] = useState<string>(''); // Speaker prompt
 
   function createInitialSlots(): CountdownSlot[] {
     return Array.from({ length: 10 }, (_, i) => {
@@ -512,14 +519,21 @@ export const App: React.FC = () => {
         setExtended720pUri(null);
         setExtended4kUri(null);
         setCinemaWallpaperUri(null);
+        setWallpaperPillars([]);
+        setCurrentPillarIndex(0);
         setBugdroidMascotUri(null);
+        setBugdroidSpeakerUri(null);
+        setIsAnalyzingBrand(false);
         setIsGeneratingWallpaper(false);
         setIsGeneratingBugdroid(false);
+        setIsGeneratingSpeakerBugdroid(false);
         setWallpaperError(null);
         setBugdroidError(null);
+        setSpeakerBugdroidError(null);
         setCustomerIndustry('');
         setWallpaperPrompt('');
         setBugdroidPrompt('');
+        setBugdroidSpeakerPrompt('');
         setProjectRenderMetrics(undefined);
         setGlobalError(null);
 
@@ -1919,9 +1933,20 @@ export const App: React.FC = () => {
   // Redo Deliverable Handlers
   const handleRedoWallpaper = async () => {
     const brand = brandName.trim() || 'Client';
-    const promptToUse =
-      wallpaperPrompt ||
-      `Ultra-wide panoramic 32:9 cinema welcome wallpaper for ${brand} in ${customerIndustry || 'enterprise industry'}, panoramic wide angle landscape at golden hour sunset, dramatic warm sun flare, cinematic lighting, shot on 65mm anamorphic lens, 4k ultra-high resolution, clean expansive composition without text, 32:9 aspect ratio.`;
+    let promptToUse = '';
+
+    // Cycle through multi-division pillars if available
+    if (wallpaperPillars.length > 0) {
+      const nextIndex = (currentPillarIndex + 1) % wallpaperPillars.length;
+      setCurrentPillarIndex(nextIndex);
+      promptToUse = wallpaperPillars[nextIndex].prompt;
+      setWallpaperPrompt(promptToUse);
+    } else {
+      promptToUse =
+        wallpaperPrompt ||
+        `Ultra-wide panoramic 32:9 cinema welcome wallpaper for ${brand} in ${customerIndustry || 'enterprise industry'}, panoramic wide angle landscape at golden hour sunset, dramatic warm sun flare, cinematic lighting, shot on 65mm anamorphic lens, 4k ultra-high resolution, clean expansive composition without text, 32:9 aspect ratio.`;
+    }
+
     setIsGeneratingWallpaper(true);
     setWallpaperError(null);
     try {
@@ -1950,13 +1975,23 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleRedoBugdroid = async () => {
+  const handleRedoBugdroid = async (type: 'worker' | 'speaker' = 'worker') => {
     const brand = brandName.trim() || 'Client';
-    const promptToUse =
-      bugdroidPrompt ||
-      `A 3D render of a cute Android Bugdroid character standing centered on a solid pure black background (#000000). The Bugdroid is dressed as a worker in the ${customerIndustry || 'industry'} and wearing a clean crisp white t-shirt with the official ${brand} logo printed crisply in the center of the chest. High resolution 3D digital art, Pixar-quality studio lighting, sharp details, centered composition.`;
-    setIsGeneratingBugdroid(true);
-    setBugdroidError(null);
+    const isWorker = type === 'worker';
+    const promptToUse = isWorker
+      ? bugdroidPrompt ||
+        `A 3D render of a cute Android Bugdroid character standing centered on a solid pure black background (#000000). The Bugdroid is dressed as an authentic worker in the ${customerIndustry || 'industry'} and wearing a clean crisp white t-shirt with the official ${brand} logo printed crisply in the center of the chest. High resolution 3D digital art, Pixar-quality studio lighting, sharp details, centered composition.`
+      : bugdroidSpeakerPrompt ||
+        `A 3D render of a cute Android Bugdroid character standing centered on a solid pure black background (#000000). The Bugdroid is ready to present as a keynote speaker, holding a sleek modern Google-branded microphone with colorful Google accents. The Bugdroid is wearing a clean crisp white t-shirt with the official ${brand} logo printed crisply in the center of the chest. High resolution 3D digital art, Pixar-quality studio lighting, sharp details, centered 1:1 square composition.`;
+
+    if (isWorker) {
+      setIsGeneratingBugdroid(true);
+      setBugdroidError(null);
+    } else {
+      setIsGeneratingSpeakerBugdroid(true);
+      setSpeakerBugdroidError(null);
+    }
+
     try {
       const res = await fetch(`${API_BASE}/api/customer-meeting-package/generate-bugdroid-mascot`, {
         method: 'POST',
@@ -1967,19 +2002,28 @@ export const App: React.FC = () => {
           companyUrl,
           apiKey,
           jobId: currentJobId || 'global',
+          type,
         }),
       });
       const data = await res.json();
       if (data.success && data.bugdroidUri) {
-        setBugdroidMascotUri(data.bugdroidUri);
+        if (isWorker) {
+          setBugdroidMascotUri(data.bugdroidUri);
+        } else {
+          setBugdroidSpeakerUri(data.bugdroidUri);
+        }
         playStepSuccessChime();
       } else {
-        setBugdroidError(data.error || 'Failed to regenerate Bugdroid mascot');
+        const msg = data.error || `Failed to regenerate ${isWorker ? 'Worker' : 'Keynote Speaker'} Bugdroid mascot`;
+        if (isWorker) setBugdroidError(msg);
+        else setSpeakerBugdroidError(msg);
       }
     } catch (e: any) {
-      setBugdroidError(e.message);
+      if (isWorker) setBugdroidError(e.message);
+      else setSpeakerBugdroidError(e.message);
     } finally {
-      setIsGeneratingBugdroid(false);
+      if (isWorker) setIsGeneratingBugdroid(false);
+      else setIsGeneratingSpeakerBugdroid(false);
     }
   };
 
@@ -1991,6 +2035,10 @@ export const App: React.FC = () => {
     setYoutubeUploadError(null);
     setWallpaperError(null);
     setBugdroidError(null);
+    setSpeakerBugdroidError(null);
+
+    // Instant Visual Feedback: Switch to active generating state immediately
+    setIsAnalyzingBrand(true);
 
     // Extract brand name from domain if user did not provide one
     let brand = brandName.trim();
@@ -2005,9 +2053,10 @@ export const App: React.FC = () => {
       }
     }
 
-    // Step 1: Analyze Brand & Extract Meeting Package Prompts via Gemini 3.8 Flash
+    // Step 1: Analyze Brand & Extract Meeting Package Prompts via Gemini 4 Argon
     let activeWallpaperPrompt = wallpaperPrompt;
     let activeBugdroidPrompt = bugdroidPrompt;
+    let activeSpeakerPrompt = bugdroidSpeakerPrompt;
 
     try {
       const analyzeRes = await fetch(`${API_BASE}/api/customer-meeting-package/analyze`, {
@@ -2029,18 +2078,29 @@ export const App: React.FC = () => {
           if (analyzeData.industry) {
             setCustomerIndustry(analyzeData.industry);
           }
-          if (analyzeData.cinemaWallpaperPrompt) {
+          if (analyzeData.wallpaperPillars && Array.isArray(analyzeData.wallpaperPillars) && analyzeData.wallpaperPillars.length > 0) {
+            setWallpaperPillars(analyzeData.wallpaperPillars);
+            setCurrentPillarIndex(0);
+            activeWallpaperPrompt = analyzeData.wallpaperPillars[0].prompt;
+            setWallpaperPrompt(activeWallpaperPrompt);
+          } else if (analyzeData.cinemaWallpaperPrompt) {
             activeWallpaperPrompt = analyzeData.cinemaWallpaperPrompt;
             setWallpaperPrompt(activeWallpaperPrompt);
           }
-          if (analyzeData.bugdroidMascotPrompt) {
-            activeBugdroidPrompt = analyzeData.bugdroidMascotPrompt;
+          if (analyzeData.bugdroidWorkerPrompt || analyzeData.bugdroidMascotPrompt) {
+            activeBugdroidPrompt = analyzeData.bugdroidWorkerPrompt || analyzeData.bugdroidMascotPrompt;
             setBugdroidPrompt(activeBugdroidPrompt);
+          }
+          if (analyzeData.bugdroidSpeakerPrompt) {
+            activeSpeakerPrompt = analyzeData.bugdroidSpeakerPrompt;
+            setBugdroidSpeakerPrompt(activeSpeakerPrompt);
           }
         }
       }
     } catch (e) {
       console.warn('[MEETING_PACKAGE] Analysis non-fatal error:', e);
+    } finally {
+      setIsAnalyzingBrand(false);
     }
 
     // Step 2: Trigger 32:9 Cinema Wallpaper if selected
@@ -2070,31 +2130,61 @@ export const App: React.FC = () => {
         .finally(() => setIsGeneratingWallpaper(false));
     }
 
-    // Step 3: Trigger Branded Bugdroid Mascot if selected
-    if (includeBugdroidMascot && activeBugdroidPrompt) {
-      setIsGeneratingBugdroid(true);
-      fetch(`${API_BASE}/api/customer-meeting-package/generate-bugdroid-mascot`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: activeBugdroidPrompt,
-          brandName: brand,
-          companyUrl,
-          apiKey,
-          jobId: currentJobId || 'global',
-        }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && data.bugdroidUri) {
-            setBugdroidMascotUri(data.bugdroidUri);
-            playStepSuccessChime();
-          } else {
-            setBugdroidError(data.error || 'Failed to render Bugdroid mascot');
-          }
+    // Step 3: Trigger Dual Branded Bugdroid Mascots (Worker + Keynote Speaker) if selected
+    if (includeBugdroidMascot) {
+      if (activeBugdroidPrompt) {
+        setIsGeneratingBugdroid(true);
+        fetch(`${API_BASE}/api/customer-meeting-package/generate-bugdroid-mascot`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: activeBugdroidPrompt,
+            brandName: brand,
+            companyUrl,
+            apiKey,
+            jobId: currentJobId || 'global',
+            type: 'worker',
+          }),
         })
-        .catch((err) => setBugdroidError(err.message))
-        .finally(() => setIsGeneratingBugdroid(false));
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success && data.bugdroidUri) {
+              setBugdroidMascotUri(data.bugdroidUri);
+              playStepSuccessChime();
+            } else {
+              setBugdroidError(data.error || 'Failed to render Worker Bugdroid mascot');
+            }
+          })
+          .catch((err) => setBugdroidError(err.message))
+          .finally(() => setIsGeneratingBugdroid(false));
+      }
+
+      if (activeSpeakerPrompt) {
+        setIsGeneratingSpeakerBugdroid(true);
+        fetch(`${API_BASE}/api/customer-meeting-package/generate-bugdroid-mascot`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt: activeSpeakerPrompt,
+            brandName: brand,
+            companyUrl,
+            apiKey,
+            jobId: currentJobId || 'global',
+            type: 'speaker',
+          }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success && data.bugdroidUri) {
+              setBugdroidSpeakerUri(data.bugdroidUri);
+              playStepSuccessChime();
+            } else {
+              setSpeakerBugdroidError(data.error || 'Failed to render Keynote Speaker Bugdroid mascot');
+            }
+          })
+          .catch((err) => setSpeakerBugdroidError(err.message))
+          .finally(() => setIsGeneratingSpeakerBugdroid(false));
+      }
     }
 
     // Step 4: Trigger 2-Minute 4K Countdown Video if selected
@@ -2290,12 +2380,18 @@ export const App: React.FC = () => {
             onIncludeBugdroidMascotChange={setIncludeBugdroidMascot}
             includeCountdownVideo={includeCountdownVideo}
             onIncludeCountdownVideoChange={setIncludeCountdownVideo}
+            isAnalyzingBrand={isAnalyzingBrand}
             cinemaWallpaperUri={cinemaWallpaperUri}
+            wallpaperPillars={wallpaperPillars}
+            currentPillarIndex={currentPillarIndex}
             bugdroidMascotUri={bugdroidMascotUri}
+            bugdroidSpeakerUri={bugdroidSpeakerUri}
             isGeneratingWallpaper={isGeneratingWallpaper}
             isGeneratingBugdroid={isGeneratingBugdroid}
+            isGeneratingSpeakerBugdroid={isGeneratingSpeakerBugdroid}
             wallpaperError={wallpaperError}
             bugdroidError={bugdroidError}
+            speakerBugdroidError={speakerBugdroidError}
             onRedoWallpaper={handleRedoWallpaper}
             onRedoBugdroid={handleRedoBugdroid}
             isGeneratingPrompts={isGeneratingPrompts}

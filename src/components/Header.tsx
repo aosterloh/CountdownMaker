@@ -247,7 +247,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Director Mode Switcher: Express vs Expert */}
       {onDirectorModeChange && (
-        <div className="hidden lg:flex items-center p-1 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-inner">
+        <div className="flex items-center p-1 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-inner">
           <button
             type="button"
             onClick={() => onDirectorModeChange('express')}
@@ -258,8 +258,9 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <Zap className="w-3.5 h-3.5 fill-current" />
-            <span>Express Director</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-white/20 text-white font-mono">DEFAULT</span>
+            <span className="hidden sm:inline">Express Director</span>
+            <span className="sm:hidden">Express</span>
+            <span className="hidden sm:inline-block px-1.5 py-0.2 rounded-full text-[9px] bg-white/20 text-white font-mono">DEFAULT</span>
           </button>
           <button
             type="button"
@@ -271,7 +272,8 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <Film className="w-3.5 h-3.5" />
-            <span>Expert Director</span>
+            <span className="hidden sm:inline">Expert Director</span>
+            <span className="sm:hidden">Expert</span>
           </button>
         </div>
       )}

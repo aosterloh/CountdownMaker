@@ -1494,41 +1494,65 @@ The customer's website URL is: "${normalizedUrl}".
 
 Perform Google Search Grounding to research:
 1. Official Customer / Brand Name.
-2. Industry & Core Domain (e.g. Commercial Aviation, Precision Agriculture, Electric Automotive, FinTech & Payments, Biotech & Healthcare, Renewable Energy).
-3. Primary signature machinery, equipment, flagship vehicles, technical facilities, or operational landscape.
-4. Logo & Visual Branding (official logo shape, emblem, colors, symbol).
-5. Appropriate worker role & attire (e.g. airline pilot in uniform cap for Lufthansa, modern farmer in straw hat for Wimex, cleanroom engineer with safety visor for semiconductor, etc.).
+2. Industry & Core Domain.
+3. Multiple distinct business divisions and creative pillars (e.g. for BASF: Agricultural Solutions & Precision Farming, High-Tech Bioscience Greenhouses, Clean Battery Materials & EV Mobility, Circular Sustainable Biopolymers).
+4. Signature machinery, equipment, modern facilities, or operational landscape across these diverse business areas.
+5. Official Logo & Visual Branding (colors, shape, emblem).
+6. Appropriate worker role & attire for their field.
 
-We need two image prompts:
-A. 32:9 CINEMA WELCOME WALLPAPER PROMPT:
-Modeled after executive cinema display blueprints (e.g. Lufthansa Boeing 747 on rain-slicked runway at dusk, Wimex combine harvester at sunset in vast golden fields):
+🚨 TONE & CREATIVITY REQUIREMENT:
+This visual package is for an inspirational, visionary executive cinema kickoff session.
+The imagery MUST be optimistic, cutting-edge, inspiring, and harmonious with nature or human ingenuity.
+DO NOT generate grim, dark, heavy industrial facilities, smokestacks, gray exhaust fumes, cooling towers, or ugly chemical cracking pipes.
+Instead, showcase inspiring, progressive, and clean domains (e.g. sunlit precision smart farming, modern automated research greenhouses, advanced clean laboratories, futuristic mobility, sustainable circular design).
+
+We need prompts for:
+A. 4 DISTINCT 32:9 CINEMA WELCOME WALLPAPER PILLARS:
+Create 4 distinctly different visionary business pillars for this company. Each must be:
 - Ultra-wide panoramic 32:9 aspect ratio cinema welcome wallpaper
-- Dramatic warm golden hour sunset or dusk lighting with sun flare and atmospheric horizon
-- Prominent focus on the client's signature machinery, vehicles, or flagship technical environment
+- Dramatic warm golden hour sunset or dawn lighting with sun flare and inspiring atmospheric horizon
+- Prominent focus on the client's signature machinery, vehicles, modern facilities, or sustainable operations in that division
 - Cinematic 65mm anamorphic wide-angle lens, clean scenic composition without any text, logos, or watermarks, 4k ultra-high resolution
 - 32:9 aspect ratio
 
-B. BUGDROID MASCOT PROMPT:
-- Cute 3D Android Bugdroid character standing centered on a solid pure black background (#000000)
-- Dressed as an authentic worker of that company (e.g. airline pilot hat and jacket, farmer hat, technical gear matching their industry)
-- Wearing a clean crisp white t-shirt with the official customer logo printed crisply in the center of the chest
-- High resolution 3D digital character art, Pixar-quality studio lighting, sharp details, centered 1:1 square composition
+B. 2 BUGDROID MASCOT PROMPTS (BOTH ON SOLID PURE BLACK BACKGROUND #000000):
+1. WORKER BUGDROID:
+- Cute 3D Android Bugdroid character standing centered on solid pure black background (#000000)
+- Dressed as an authentic worker of that company (e.g. pilot cap, farmer straw hat, lab coat, hardhat)
+- Wearing a clean crisp white t-shirt with the official customer logo printed crisply on the chest
+- High resolution 3D character art, Pixar-quality studio lighting, sharp details, centered 1:1 square composition
+
+2. KEYNOTE SPEAKER BUGDROID:
+- Cute 3D Android Bugdroid character standing centered on solid pure black background (#000000)
+- Confidently holding a sleek modern Google-branded microphone with subtle colorful Google accents ('G' logo on mic)
+- Wearing a clean crisp white t-shirt with the official customer logo printed crisply on the chest
+- Ready to present on stage at the cinema session
+- High resolution 3D character art, Pixar-quality studio lighting, sharp details, centered 1:1 square composition
 
 Respond strictly in this structured format:
 COMPANY_NAME: [Official Company Name]
 INDUSTRY: [Industry Category]
 BUSINESS_SUMMARY: [1-2 sentences on what they do]
 LOGO_DESCRIPTION: [Colors, shape, and emblem of their logo]
-CINEMA_WALLPAPER_PROMPT: [The complete detailed 32:9 wallpaper prompt]
-BUGDROID_MASCOT_PROMPT: [The complete detailed Bugdroid mascot prompt]
+PILLAR_1_NAME: [Division/Theme Name, e.g. Precision Agriculture & Smart Farming]
+PILLAR_1_PROMPT: [Complete 32:9 wallpaper prompt for Pillar 1]
+PILLAR_2_NAME: [Division/Theme Name, e.g. High-Tech Greenhouses & Plant Science]
+PILLAR_2_PROMPT: [Complete 32:9 wallpaper prompt for Pillar 2]
+PILLAR_3_NAME: [Division/Theme Name, e.g. Clean Energy & Battery Materials]
+PILLAR_3_PROMPT: [Complete 32:9 wallpaper prompt for Pillar 3]
+PILLAR_4_NAME: [Division/Theme Name, e.g. Circular Design & Sustainable Materials]
+PILLAR_4_PROMPT: [Complete 32:9 wallpaper prompt for Pillar 4]
+BUGDROID_WORKER_PROMPT: [The complete Bugdroid worker prompt]
+BUGDROID_SPEAKER_PROMPT: [The complete Bugdroid keynote speaker prompt with Google-branded microphone]
 `;
 
     let detectedBrand = '';
     let industry = '';
     let businessSummary = '';
     let logoDescription = '';
-    let cinemaWallpaperPrompt = '';
-    let bugdroidMascotPrompt = '';
+    let pillars: Array<{ division: string; prompt: string }> = [];
+    let bugdroidWorkerPrompt = '';
+    let bugdroidSpeakerPrompt = '';
 
     if (key) {
       const candidateModels = ['gemini-4-argon', 'gemini-3.8-flash', 'gemini-3.7-flash'];
@@ -1541,7 +1565,7 @@ BUGDROID_MASCOT_PROMPT: [The complete detailed Bugdroid mascot prompt]
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 contents: [{ parts: [{ text: promptText }] }],
-                generationConfig: { temperature: 0.7 },
+                generationConfig: { temperature: 0.8 },
                 tools: [{ googleSearch: {} }],
               }),
             }
@@ -1563,11 +1587,38 @@ BUGDROID_MASCOT_PROMPT: [The complete detailed Bugdroid mascot prompt]
               const logoMatch = text.match(/LOGO_DESCRIPTION:\s*(.+)/i);
               if (logoMatch) logoDescription = logoMatch[1].trim();
 
-              const wallMatch = text.match(/CINEMA_WALLPAPER_PROMPT:\s*([\s\S]+?)(?=BUGDROID_MASCOT_PROMPT:|$)/i);
-              if (wallMatch) cinemaWallpaperPrompt = wallMatch[1].trim();
+              // Parse up to 4 pillars
+              for (let i = 1; i <= 4; i++) {
+                const nameRegex = new RegExp(`PILLAR_${i}_NAME:\\s*(.+)`, 'i');
+                const promptRegex = new RegExp(`PILLAR_${i}_PROMPT:\\s*([\\s\\S]+?)(?=PILLAR_${i + 1}_NAME:|BUGDROID_WORKER_PROMPT:|BUGDROID_SPEAKER_PROMPT:|$)`, 'i');
+                const pName = text.match(nameRegex);
+                const pPrompt = text.match(promptRegex);
+                if (pPrompt && pPrompt[1].trim()) {
+                  pillars.push({
+                    division: pName ? pName[1].trim() : `Division ${i}`,
+                    prompt: pPrompt[1].trim(),
+                  });
+                }
+              }
 
-              const bugMatch = text.match(/BUGDROID_MASCOT_PROMPT:\s*([\s\S]+)/i);
-              if (bugMatch) bugdroidMascotPrompt = bugMatch[1].trim();
+              // Fallback single cinema prompt if old format was returned
+              if (pillars.length === 0) {
+                const singleMatch = text.match(/CINEMA_WALLPAPER_PROMPT:\s*([\s\S]+?)(?=BUGDROID_WORKER_PROMPT:|BUGDROID_MASCOT_PROMPT:|$)/i);
+                if (singleMatch) {
+                  pillars.push({
+                    division: 'Primary Division',
+                    prompt: singleMatch[1].trim(),
+                  });
+                }
+              }
+
+              const workerMatch = text.match(/BUGDROID_WORKER_PROMPT:\s*([\s\S]+?)(?=BUGDROID_SPEAKER_PROMPT:|$)/i) ||
+                                  text.match(/BUGDROID_MASCOT_PROMPT:\s*([\s\S]+)/i);
+              if (workerMatch) bugdroidWorkerPrompt = workerMatch[1].trim();
+
+              const speakerMatch = text.match(/BUGDROID_SPEAKER_PROMPT:\s*([\s\S]+)/i);
+              if (speakerMatch) bugdroidSpeakerPrompt = speakerMatch[1].trim();
+
               break;
             }
           }
@@ -1581,12 +1632,29 @@ BUGDROID_MASCOT_PROMPT: [The complete detailed Bugdroid mascot prompt]
     const finalBrand = brandName?.trim() || detectedBrand || (fallbackBrand.charAt(0).toUpperCase() + fallbackBrand.slice(1));
     const finalIndustry = industry || 'Enterprise Technology';
 
-    if (!cinemaWallpaperPrompt) {
-      cinemaWallpaperPrompt = `Ultra-wide panoramic 32:9 cinema welcome wallpaper for ${finalBrand} in ${finalIndustry}, panoramic wide angle landscape at golden hour sunset, dramatic warm sun flare, cinematic lighting, shot on 65mm anamorphic lens, 4k ultra-high resolution, clean expansive composition without text, 32:9 aspect ratio.`;
+    if (pillars.length === 0) {
+      pillars = [
+        {
+          division: 'Precision Operations & Smart Systems',
+          prompt: `Ultra-wide panoramic 32:9 cinema welcome wallpaper for ${finalBrand} in ${finalIndustry}, panoramic wide angle landscape at golden hour sunset, dramatic warm sun flare, visionary sustainable operations and cutting-edge facilities, cinematic lighting, shot on 65mm anamorphic lens, 4k ultra-high resolution, clean expansive composition without text, 32:9 aspect ratio.`,
+        },
+        {
+          division: 'Sustainable Green Innovation & Clean Technology',
+          prompt: `Ultra-wide panoramic 32:9 cinema welcome wallpaper for ${finalBrand}, modern sustainable innovations, solar-infused architecture and lush green surroundings at sunrise, soft warm morning mist, cinematic lighting, shot on 65mm anamorphic lens, 4k ultra-high resolution, clean expansive composition without text, 32:9 aspect ratio.`,
+        },
+        {
+          division: 'Next-Gen Research & Bioscience Laboratories',
+          prompt: `Ultra-wide panoramic 32:9 cinema welcome wallpaper for ${finalBrand}, state-of-the-art clean laboratory and luminous high-tech greenhouse at golden dusk, dramatic warm lighting through expansive glass structures, cinematic lighting, shot on 65mm anamorphic lens, 4k ultra-high resolution, clean expansive composition without text, 32:9 aspect ratio.`,
+        },
+      ];
     }
 
-    if (!bugdroidMascotPrompt) {
-      bugdroidMascotPrompt = `A 3D render of a cute Android Bugdroid character standing centered on a solid pure black background (#000000). The Bugdroid is dressed as a worker in the ${finalIndustry} industry and wearing a clean crisp white t-shirt with the official ${finalBrand} logo printed crisply in the center of the chest. High resolution 3D digital art, Pixar-quality studio lighting, sharp details, centered composition.`;
+    if (!bugdroidWorkerPrompt) {
+      bugdroidWorkerPrompt = `A 3D render of a cute Android Bugdroid character standing centered on a solid pure black background (#000000). The Bugdroid is dressed as an authentic worker in the ${finalIndustry} industry and wearing a clean crisp white t-shirt with the official ${finalBrand} logo printed crisply in the center of the chest. High resolution 3D digital art, Pixar-quality studio lighting, sharp details, centered composition.`;
+    }
+
+    if (!bugdroidSpeakerPrompt) {
+      bugdroidSpeakerPrompt = `A 3D render of a cute Android Bugdroid character standing centered on a solid pure black background (#000000). The Bugdroid is ready to present as a keynote speaker, holding a sleek modern Google-branded microphone with colorful Google accents. The Bugdroid is wearing a clean crisp white t-shirt with the official ${finalBrand} logo printed crisply in the center of the chest. High resolution 3D digital art, Pixar-quality studio lighting, sharp details, centered 1:1 square composition.`;
     }
 
     return res.json({
@@ -1595,8 +1663,11 @@ BUGDROID_MASCOT_PROMPT: [The complete detailed Bugdroid mascot prompt]
       industry: finalIndustry,
       businessSummary: businessSummary || `Official website: ${normalizedUrl}`,
       logoDescription,
-      cinemaWallpaperPrompt,
-      bugdroidMascotPrompt,
+      cinemaWallpaperPrompt: pillars[0]?.prompt,
+      wallpaperPillars: pillars,
+      bugdroidWorkerPrompt,
+      bugdroidSpeakerPrompt,
+      bugdroidMascotPrompt: bugdroidWorkerPrompt,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -1638,34 +1709,36 @@ app.post('/api/customer-meeting-package/generate-cinema-wallpaper', requireCloud
   }
 });
 
-// Customer Meeting Package: Generate Cute Bugdroid Mascot
+// Customer Meeting Package: Generate Cute Bugdroid Mascot (Worker or Keynote Speaker)
 app.post('/api/customer-meeting-package/generate-bugdroid-mascot', requireCloudspaceDomain, async (req, res) => {
   try {
-    const { prompt, brandName = 'Client', companyUrl, apiKey, jobId = 'global' } = req.body;
+    const { prompt, brandName = 'Client', companyUrl, apiKey, jobId = 'global', type = 'worker' } = req.body;
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required for Bugdroid mascot generation.' });
     }
 
     const safeBrand = (brandName || 'client').toLowerCase().replace(/[^a-z0-9]/g, '_');
-    addLog('INFO', 'GEMINI_AI', `Rendering cute Bugdroid Mascot on black for ${brandName} with Nano Banana 2...`);
+    const roleLabel = type === 'speaker' ? 'Keynote Speaker (Google Mic)' : 'Company Worker';
+    addLog('INFO', 'GEMINI_AI', `Rendering cute Bugdroid Mascot (${roleLabel}) on black for ${brandName} with Nano Banana 2.1...`);
 
     const result = await synthesizeNanoBananaImage(prompt, apiKey, {
       aspectRatio: '1:1',
       jobId,
-      filenamePrefix: `bugdroid_${safeBrand}`,
+      filenamePrefix: `bugdroid_${safeBrand}_${type === 'speaker' ? 'speaker' : 'worker'}`,
     });
 
     if (!result.success || !result.imageUri) {
-      addLog('ERROR', 'GEMINI_AI', `Bugdroid mascot rendering failed: ${result.error}`);
+      addLog('ERROR', 'GEMINI_AI', `Bugdroid mascot (${roleLabel}) rendering failed: ${result.error}`);
       return res.status(500).json({ success: false, error: result.error });
     }
 
-    addLog('SUCCESS', 'GEMINI_AI', `Cute Bugdroid Mascot ready for ${brandName}`);
+    addLog('SUCCESS', 'GEMINI_AI', `Cute Bugdroid Mascot (${roleLabel}) ready for ${brandName}`);
     return res.json({
       success: true,
       bugdroidUri: result.imageUri,
       model: result.model,
       promptUsed: prompt,
+      type,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
