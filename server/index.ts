@@ -1422,6 +1422,8 @@ async function synthesizeNanoBananaImage(
   let enhancedPrompt = prompt;
   if (aspectRatio === '32:9') {
     enhancedPrompt = `${prompt} Ultra-wide panoramic 32:9 ratio aspect ratio 32:9 cinema wallpaper, wide angle panoramic photography, razor-sharp 4K cinematic quality, 32:9 screen format, 3840x1080 resolution, wide expansive composition.`;
+  } else if (aspectRatio === '16:9') {
+    enhancedPrompt = `${prompt} Cinematic 16:9 widescreen composition, sharp 4K UHD photorealistic quality, 3840x2160 resolution, clean professional lighting, razor-sharp detail.`;
   }
 
   for (let keyIdx = 0; keyIdx < apiKeys.length; keyIdx++) {
@@ -1458,7 +1460,18 @@ async function synthesizeNanoBananaImage(
                     { stdio: 'pipe' }
                   );
                 } catch (ffmpegErr: any) {
-                  console.warn('[NANO_BANANA_FFMPEG_RESIZE] ffmpeg resize fallback:', ffmpegErr.message);
+                  console.warn('[NANO_BANANA_FFMPEG_RESIZE] ffmpeg 32:9 resize fallback:', ffmpegErr.message);
+                  fs.copyFileSync(rawPath, finalPath);
+                }
+              } else if (aspectRatio === '16:9') {
+                try {
+                  const { execSync } = await import('child_process');
+                  execSync(
+                    `ffmpeg -y -i "${rawPath}" -vf "scale=3840:2160:force_original_aspect_ratio=increase,crop=3840:2160" "${finalPath}"`,
+                    { stdio: 'pipe' }
+                  );
+                } catch (ffmpegErr: any) {
+                  console.warn('[NANO_BANANA_FFMPEG_RESIZE] ffmpeg 16:9 resize fallback:', ffmpegErr.message);
                   fs.copyFileSync(rawPath, finalPath);
                 }
               } else {
@@ -1699,22 +1712,23 @@ BUGDROID_SPEAKER_PROMPT: [The complete Bugdroid keynote speaker prompt with Goog
   }
 });
 
-// Customer Meeting Package: Generate 32:9 Cinema Wallpaper
+// Customer Meeting Package: Generate Cinema Wallpaper (32:9 Ultrawide or 16:9 Standard)
 app.post('/api/customer-meeting-package/generate-cinema-wallpaper', requireCloudspaceDomain, async (req, res) => {
   try {
-    const { prompt, brandName = 'Client', companyUrl, apiKey, jobId = 'global' } = req.body;
+    const { prompt, brandName = 'Client', companyUrl, apiKey, jobId = 'global', aspectRatio = '32:9' } = req.body;
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required for cinema wallpaper generation.' });
     }
 
+    const effectiveRatio: '32:9' | '16:9' = aspectRatio === '16:9' ? '16:9' : '32:9';
     const safeBrand = (brandName || 'client').toLowerCase().replace(/[^a-z0-9]/g, '_');
-    addLog('INFO', 'GEMINI_AI', `Synthesizing 4K 32:9 Cinema Wallpaper for ${brandName} with Nano Banana 2...`);
+    addLog('INFO', 'GEMINI_AI', `Synthesizing 4K ${effectiveRatio} Cinema Wallpaper for ${brandName} with Nano Banana 2...`);
 
     const result = await synthesizeNanoBananaImage(prompt, apiKey, {
-      aspectRatio: '32:9',
-      upscaleTo4k32x9: true,
+      aspectRatio: effectiveRatio,
+      upscaleTo4k32x9: effectiveRatio === '32:9',
       jobId,
-      filenamePrefix: `wallpaper_${safeBrand}`,
+      filenamePrefix: `wallpaper_${safeBrand}_${effectiveRatio.replace(':', 'x')}`,
     });
 
     if (!result.success || !result.imageUri) {
@@ -1722,10 +1736,12 @@ app.post('/api/customer-meeting-package/generate-cinema-wallpaper', requireCloud
       return res.status(500).json({ success: false, error: result.error });
     }
 
-    addLog('SUCCESS', 'GEMINI_AI', `4K 32:9 Cinema Wallpaper ready for ${brandName} (3840x1080)`);
+    const resolutionText = effectiveRatio === '32:9' ? '3840x1080' : '3840x2160';
+    addLog('SUCCESS', 'GEMINI_AI', `4K ${effectiveRatio} Cinema Wallpaper ready for ${brandName} (${resolutionText})`);
     return res.json({
       success: true,
       wallpaperUri: result.imageUri,
+      aspectRatio: effectiveRatio,
       model: result.model,
       promptUsed: prompt,
     });

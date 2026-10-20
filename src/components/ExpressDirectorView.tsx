@@ -48,6 +48,8 @@ interface ExpressDirectorViewProps {
   cinemaWallpaperUri: string | null;
   wallpaperPillars?: Array<{ division: string; prompt: string }>;
   currentPillarIndex?: number;
+  wallpaperAspectRatio?: '32:9' | '16:9';
+  onWallpaperAspectRatioChange?: (ratio: '32:9' | '16:9') => void;
   bugdroidMascotUri: string | null; // Worker
   bugdroidSpeakerUri?: string | null; // Keynote Speaker
   isGeneratingWallpaper: boolean;
@@ -76,7 +78,6 @@ interface ExpressDirectorViewProps {
 
   // Actions
   onStartAutopilot: () => void;
-  onSwitchToExpert: () => void;
   onUploadToYouTube: () => Promise<void>;
   onResetProject: () => void;
   onExportExtended: (resolution?: '720p' | '4k') => Promise<void>;
@@ -101,6 +102,8 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
   cinemaWallpaperUri,
   wallpaperPillars = [],
   currentPillarIndex = 0,
+  wallpaperAspectRatio = '32:9',
+  onWallpaperAspectRatioChange,
   bugdroidMascotUri,
   bugdroidSpeakerUri = null,
   isGeneratingWallpaper,
@@ -125,7 +128,6 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
   autoUploadYouTube,
   onAutoUploadYouTubeChange,
   onStartAutopilot,
-  onSwitchToExpert,
   onUploadToYouTube,
   onResetProject,
   onExportExtended,
@@ -310,6 +312,7 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
           </div>
 
           {/* DELIVERABLE CARD 1: 32:9 CINEMA WELCOME WALLPAPER */}
+          {/* DELIVERABLE CARD 1: CINEMA WALLPAPER (32:9 or 16:9) */}
           {includeCinemaWallpaper && (
             <div className="bg-white dark:bg-slate-900 border-2 border-purple-500/30 dark:border-purple-500/20 rounded-3xl p-6 sm:p-8 shadow-xl space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
@@ -320,10 +323,10 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                        1. 32:9 Cinema Welcome Wallpaper
+                        1. {wallpaperAspectRatio === '16:9' ? '16:9 Widescreen' : '32:9 Cinema'} Welcome Wallpaper
                       </h4>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30">
-                        3840×1080 4K
+                        {wallpaperAspectRatio === '16:9' ? '3840×2160 4K UHD' : '3840×1080 4K Cinema'}
                       </span>
                       {wallpaperPillars && wallpaperPillars.length > 0 && wallpaperPillars[currentPillarIndex % wallpaperPillars.length] && (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30">
@@ -332,7 +335,9 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                       )}
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Ultra-wide panoramic format tailored for the cinema 32:9 display screen.
+                      {wallpaperAspectRatio === '16:9'
+                        ? 'Standard 16:9 widescreen format tailored for conference presentations, Google Slides, and standard displays.'
+                        : 'Ultra-wide panoramic format tailored for the cinema 32:9 display screen.'}
                       {wallpaperPillars && wallpaperPillars.length > 1 && (
                         <span className="ml-1 text-purple-600 dark:text-purple-400 font-semibold">
                           (Pillar {(currentPillarIndex % wallpaperPillars.length) + 1} of {wallpaperPillars.length})
@@ -342,33 +347,70 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                   </div>
                 </div>
 
-                {/* Redo Wallpaper Pill */}
-                {(cinemaWallpaperUri || isGeneratingWallpaper) && (
-                  <button
-                    type="button"
-                    onClick={onRedoWallpaper}
-                    disabled={isGeneratingWallpaper || isAnalyzingBrand}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-slate-700 dark:text-slate-300 hover:text-purple-600 dark:hover:text-purple-400 border border-slate-200 dark:border-slate-700 hover:border-purple-500/30 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
-                    title="Rotate to another customer business area & fresh creative theme"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingWallpaper ? 'animate-spin text-purple-500' : ''}`} />
-                    <span>{isGeneratingWallpaper ? 'Generating Division...' : '🔄 Redo (Try Another Business Division)'}</span>
-                  </button>
-                )}
+                {/* Aspect Ratio Switcher & Redo Wallpaper Pill */}
+                <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+                  {/* Aspect Ratio Segmented Control */}
+                  <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-inner">
+                    <button
+                      type="button"
+                      onClick={() => onWallpaperAspectRatioChange?.('32:9')}
+                      disabled={isGeneratingWallpaper || isAnalyzingBrand}
+                      className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                        wallpaperAspectRatio === '32:9'
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                      title="32:9 Ultrawide Cinema Format (3840×1080)"
+                    >
+                      32:9 Cinema
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onWallpaperAspectRatioChange?.('16:9')}
+                      disabled={isGeneratingWallpaper || isAnalyzingBrand}
+                      className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                        wallpaperAspectRatio === '16:9'
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                      title="16:9 Standard Widescreen Format (3840×2160)"
+                    >
+                      16:9 Standard
+                    </button>
+                  </div>
+
+                  {/* Redo Wallpaper Pill */}
+                  {(cinemaWallpaperUri || isGeneratingWallpaper) && (
+                    <button
+                      type="button"
+                      onClick={onRedoWallpaper}
+                      disabled={isGeneratingWallpaper || isAnalyzingBrand}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-purple-950/40 text-slate-700 dark:text-slate-300 hover:text-purple-600 dark:hover:text-purple-400 border border-slate-200 dark:border-slate-700 hover:border-purple-500/30 text-xs font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                      title="Rotate to another customer business area & fresh creative theme"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingWallpaper ? 'animate-spin text-purple-500' : ''}`} />
+                      <span>{isGeneratingWallpaper ? 'Generating Division...' : '🔄 Redo (Next Division)'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* Wallpaper Preview Container (32:9 Aspect Ratio) */}
-              <div className="aspect-[32/9] bg-slate-950 rounded-2xl overflow-hidden shadow-2xl relative border border-slate-800 flex items-center justify-center group">
+              {/* Wallpaper Preview Container (Dynamic 32:9 or 16:9 Aspect Ratio) */}
+              <div
+                className={`${
+                  wallpaperAspectRatio === '16:9' ? 'aspect-video' : 'aspect-[32/9]'
+                } bg-slate-950 rounded-2xl overflow-hidden shadow-2xl relative border border-slate-800 flex items-center justify-center group transition-all duration-300`}
+              >
                 {cinemaWallpaperUri ? (
                   <>
                     <img
                       src={getMediaUrl(cinemaWallpaperUri)}
-                      alt="32:9 Cinema Wallpaper"
+                      alt={`${wallpaperAspectRatio} Cinema Wallpaper`}
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-4 pointer-events-none">
                       <span className="text-xs font-mono text-white/90 bg-black/50 px-2.5 py-1 rounded-lg backdrop-blur-sm">
-                        32:9 • 3840×1080 Ultra-Wide
+                        {wallpaperAspectRatio === '16:9' ? '16:9 • 3840×2160 UHD Widescreen' : '32:9 • 3840×1080 Ultra-Wide Cinema'}
                       </span>
                       <a
                         href={getMediaUrl(cinemaWallpaperUri)}
@@ -387,10 +429,12 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                     <p className="text-xs font-bold text-slate-300">
                       {isAnalyzingBrand
                         ? 'Gemini 4 Argon discovering visionary business pillars...'
-                        : 'Synthesizing 4K 32:9 Cinema Wallpaper with Nano Banana 2.1 (4K)...'}
+                        : `Synthesizing 4K ${wallpaperAspectRatio} Wallpaper with Nano Banana 2.1 (4K)...`}
                     </p>
                     <span className="text-[11px] text-slate-500">
-                      Ultra-wide cinematic composition • Optimistic forward-facing business division
+                      {wallpaperAspectRatio === '16:9'
+                        ? '16:9 widescreen composition • Optimistic forward-facing business division'
+                        : 'Ultra-wide cinematic composition • Optimistic forward-facing business division'}
                     </span>
                   </div>
                 ) : wallpaperError ? (
@@ -415,11 +459,11 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                 <div className="flex justify-end pt-1">
                   <a
                     href={getMediaUrl(cinemaWallpaperUri)}
-                    download={`cinema_wallpaper_${(displayBrand || 'client').toLowerCase().replace(/[^a-z0-9]/g, '_')}_32x9_4k.png`}
+                    download={`wallpaper_${(displayBrand || 'client').toLowerCase().replace(/[^a-z0-9]/g, '_')}_${wallpaperAspectRatio === '16:9' ? '16x9_4k' : '32x9_4k'}.png`}
                     className="py-3 px-5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-purple-500/20 transition-all cursor-pointer"
                   >
                     <Download className="w-4 h-4" />
-                    <span>Download 4K 32:9 Cinema Wallpaper (.png)</span>
+                    <span>Download 4K {wallpaperAspectRatio === '16:9' ? '16:9 Widescreen' : '32:9 Cinema'} Wallpaper (.png)</span>
                   </a>
                 </div>
               )}
@@ -721,19 +765,6 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                   <span>{youtubeUploadError}</span>
                 </div>
               )}
-
-              {/* Expert Director Drawer Link */}
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                <span>Want to adjust individual scene prompts or audio crossfades?</span>
-                <button
-                  type="button"
-                  onClick={onSwitchToExpert}
-                  className="font-extrabold text-[#4285F4] hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <Sliders className="w-3.5 h-3.5" />
-                  <span>Open in Expert Director</span>
-                </button>
-              </div>
             </div>
           )}
         </div>
@@ -770,9 +801,9 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                           ? 'Uploading 4K Cut to YouTube'
                           : 'Generating Customer Deliverables'
                         : isGeneratingWallpaper && (isGeneratingBugdroid || isGeneratingSpeakerBugdroid)
-                        ? 'Synthesizing 32:9 Wallpaper & Dual Bugdroid Mascots'
+                        ? `Synthesizing ${wallpaperAspectRatio} Wallpaper & Dual Bugdroid Mascots`
                         : isGeneratingWallpaper
-                        ? 'Synthesizing 4K 32:9 Cinema Wallpaper'
+                        ? `Synthesizing 4K ${wallpaperAspectRatio} Cinema Wallpaper`
                         : 'Rendering Cute Bugdroid Mascots'}
                     </span>
                   </h3>
@@ -782,17 +813,6 @@ export const ExpressDirectorView: React.FC<ExpressDirectorViewProps> = ({
                 </p>
               </div>
             </div>
-
-            {includeCountdownVideo && (
-              <button
-                type="button"
-                onClick={onSwitchToExpert}
-                className="text-xs font-bold text-[#4285F4] hover:underline flex items-center gap-1 cursor-pointer self-start sm:self-auto"
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>View Expert Studio</span>
-              </button>
-            )}
           </div>
 
           {/* Stepper Pipeline (Shown if Video is Included) */}

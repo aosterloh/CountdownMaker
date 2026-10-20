@@ -1,32 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Wand2,
   Sparkles,
   RefreshCw,
   Film,
   Download,
   CheckCircle2,
   Video,
-  ChevronRight,
-  Layers,
-  ChevronDown,
-  ChevronUp,
   Play,
   HelpCircle,
 } from 'lucide-react';
 import { Header } from './components/Header';
-import { ThemeInputForm } from './components/ThemeInputForm';
-import { SequentialStudio } from './components/SequentialStudio';
-import { PromptReviewList } from './components/PromptReviewList';
-import { PromptCarousel } from './components/PromptCarousel';
-import { GoogleProgressBar } from './components/GoogleProgressBar';
-import { SlotCard } from './components/SlotCard';
-import { WaveformTimeline } from './components/WaveformTimeline';
-import { SimplifiedAudioPreview } from './components/SimplifiedAudioPreview';
+import { ExpressDirectorView } from './components/ExpressDirectorView';
 import { RefineModal } from './components/RefineModal';
-import { FinalCutExportStudio } from './components/FinalCutExportStudio';
-import { BulkVideoProgressPanel } from './components/BulkVideoProgressPanel';
-import { SingleClipFixer } from './components/SingleClipFixer';
 import { GoogleAuthGate } from './components/GoogleAuthGate';
 import { PromptGuideModal } from './components/PromptGuideModal';
 import { RecentMastersCarousel } from './components/RecentMastersCarousel';
@@ -39,7 +24,6 @@ import { playPromptChime, playStepSuccessChime, playGrandFinaleChime, setSoundEn
 import { startTitlePulsing, sendDesktopNotification, requestNotificationPermission } from './utils/browserNotifications';
 import { getMediaUrl } from './utils/media';
 import { extractTimestampFromUri, getLatestSlotVideoTimestamp } from './utils/videoTimeline';
-import { ExpressDirectorView } from './components/ExpressDirectorView';
 import { requestYouTubeAccessToken, getCachedYouTubeToken } from './utils/youtubeAuth';
 
 const API_BASE = window.location.port === '5173' ? 'http://localhost:3001' : '';
@@ -225,16 +209,15 @@ export const App: React.FC = () => {
   const [styleModifiers, setStyleModifiers] = useState<string>('');
 
 
-  // Director Mode: 'express' (1-click autonomous autopilot) vs 'expert' (deep granular control)
-  // Default to 'express' on every fresh visit so Customer Meeting Package generator is prominently on top
-  const [directorMode, setDirectorMode] = useState<'express' | 'expert'>('express');
-
-  const handleDirectorModeChange = (mode: 'express' | 'expert') => {
-    setDirectorMode(mode);
+  // Executive Wallpaper Aspect Ratio: '32:9' (Ultrawide Cinema, Default) vs '16:9' (Standard Widescreen)
+  const [wallpaperAspectRatio, setWallpaperAspectRatio] = useState<'32:9' | '16:9'>(() => {
     try {
-      localStorage.setItem('countdown_director_mode', mode);
-    } catch {}
-  };
+      const saved = localStorage.getItem('countdown_wallpaper_aspect_ratio');
+      return saved === '16:9' ? '16:9' : '32:9';
+    } catch {
+      return '32:9';
+    }
+  });
 
   // YouTube Unlisted Auto-Upload State
   const [autoUploadYouTube, setAutoUploadYouTube] = useState<boolean>(() => {
@@ -1685,27 +1668,15 @@ export const App: React.FC = () => {
       sorted.map((s) => handleGenerateVideoForSlot(s.index, 1, qualityMode, s.videoPrompt))
     );
 
-    // In Express Director mode: autonomously proceed directly to 4K Extended Master Cut export!
-    if (directorMode === 'express' || isAutopilotRunningRef.current) {
-      // Set export loading flags BEFORE clearing batch video generating so isAnyActive NEVER drops
-      setIsExportingExtendedMaster(true);
-      setIsExportingMaster(true);
-      setIsBatchGeneratingVideos(false);
-      setActiveVideoSlots([]);
+    // Autonomously proceed directly to 4K Extended Master Cut export!
+    setIsExportingExtendedMaster(true);
+    setIsExportingMaster(true);
+    setIsBatchGeneratingVideos(false);
+    setActiveVideoSlots([]);
 
-      const activeJobId = currentJobIdRef.current || currentJobId;
-      const activeSlots = slotsRef.current || slots;
-      await handleExportExtendedMaster('4k', activeJobId || undefined, activeSlots);
-    } else {
-      setIsBatchGeneratingVideos(false);
-      setActiveVideoSlots([]);
-      playStepSuccessChime();
-      const customer = brandName.trim() || (currentJobIdRef.current ? currentJobIdRef.current.split('-')[0] : 'Client');
-      startTitlePulsing(`🔔 ${customer} (10/10 Ready!)`, `${customer} • [10/10 Clips] Countdown`);
-      sendDesktopNotification(`🎉 ${customer}: All 10 Countdown Videos Ready!`, {
-        body: `Your 30-second AI countdown clips for ${customer} have finished generating. Click here to preview with audio!`,
-      });
-    }
+    const activeJobId = currentJobIdRef.current || currentJobId;
+    const activeSlots = slotsRef.current || slots;
+    await handleExportExtendedMaster('4k', activeJobId || undefined, activeSlots);
   };
 
   // 4. Update Temporal Config for Slot
@@ -1930,11 +1901,59 @@ export const App: React.FC = () => {
     }
   };
 
+  // Unified Wallpaper Generator supporting 32:9 and 16:9 aspect ratios
+  const generateWallpaper = async (promptToUse?: string, ratioToUse?: '32:9' | '16:9') => {
+    const brand = brandName.trim() || 'Client';
+    const effectiveRatio = ratioToUse || wallpaperAspectRatio;
+    const prompt =
+      promptToUse ||
+      wallpaperPrompt ||
+      `Executive welcome wallpaper for ${brand} in ${customerIndustry || 'enterprise industry'}, wide angle landscape at golden hour sunset, dramatic warm sun flare, cinematic lighting, shot on 65mm anamorphic lens, 4k ultra-high resolution, clean expansive composition without text.`;
+
+    setIsGeneratingWallpaper(true);
+    setWallpaperError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/customer-meeting-package/generate-cinema-wallpaper`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          brandName: brand,
+          companyUrl,
+          apiKey,
+          aspectRatio: effectiveRatio,
+          jobId: currentJobId || 'global',
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.wallpaperUri) {
+        setCinemaWallpaperUri(data.wallpaperUri);
+        playStepSuccessChime();
+      } else {
+        setWallpaperError(data.error || `Failed to generate ${effectiveRatio} cinema wallpaper`);
+      }
+    } catch (e: any) {
+      setWallpaperError(e.message);
+    } finally {
+      setIsGeneratingWallpaper(false);
+    }
+  };
+
+  const handleAspectRatioChange = (newRatio: '32:9' | '16:9') => {
+    if (newRatio === wallpaperAspectRatio) return;
+    setWallpaperAspectRatio(newRatio);
+    try {
+      localStorage.setItem('countdown_wallpaper_aspect_ratio', newRatio);
+    } catch {}
+    // If a prompt or wallpaper exists, regenerate immediately in the chosen ratio
+    if (wallpaperPrompt || cinemaWallpaperUri || brandName.trim()) {
+      generateWallpaper(wallpaperPrompt, newRatio);
+    }
+  };
+
   // Redo Deliverable Handlers
   const handleRedoWallpaper = async () => {
-    const brand = brandName.trim() || 'Client';
     let promptToUse = '';
-
     // Cycle through multi-division pillars if available
     if (wallpaperPillars.length > 0) {
       const nextIndex = (currentPillarIndex + 1) % wallpaperPillars.length;
@@ -1944,35 +1963,9 @@ export const App: React.FC = () => {
     } else {
       promptToUse =
         wallpaperPrompt ||
-        `Ultra-wide panoramic 32:9 cinema welcome wallpaper for ${brand} in ${customerIndustry || 'enterprise industry'}, panoramic wide angle landscape at golden hour sunset, dramatic warm sun flare, cinematic lighting, shot on 65mm anamorphic lens, 4k ultra-high resolution, clean expansive composition without text, 32:9 aspect ratio.`;
+        `Executive welcome wallpaper for ${brandName.trim() || 'Client'} in ${customerIndustry || 'enterprise industry'}, wide angle landscape at golden hour sunset, dramatic warm sun flare, cinematic lighting, shot on 65mm anamorphic lens, 4k ultra-high resolution, clean expansive composition without text.`;
     }
-
-    setIsGeneratingWallpaper(true);
-    setWallpaperError(null);
-    try {
-      const res = await fetch(`${API_BASE}/api/customer-meeting-package/generate-cinema-wallpaper`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: promptToUse,
-          brandName: brand,
-          companyUrl,
-          apiKey,
-          jobId: currentJobId || 'global',
-        }),
-      });
-      const data = await res.json();
-      if (data.success && data.wallpaperUri) {
-        setCinemaWallpaperUri(data.wallpaperUri);
-        playStepSuccessChime();
-      } else {
-        setWallpaperError(data.error || 'Failed to regenerate 32:9 cinema wallpaper');
-      }
-    } catch (e: any) {
-      setWallpaperError(e.message);
-    } finally {
-      setIsGeneratingWallpaper(false);
-    }
+    await generateWallpaper(promptToUse, wallpaperAspectRatio);
   };
 
   const handleRedoBugdroid = async (type: 'worker' | 'speaker' = 'worker') => {
@@ -2103,31 +2096,9 @@ export const App: React.FC = () => {
       setIsAnalyzingBrand(false);
     }
 
-    // Step 2: Trigger 32:9 Cinema Wallpaper if selected
+    // Step 2: Trigger Cinema Wallpaper (32:9 or 16:9) if selected
     if (includeCinemaWallpaper && activeWallpaperPrompt) {
-      setIsGeneratingWallpaper(true);
-      fetch(`${API_BASE}/api/customer-meeting-package/generate-cinema-wallpaper`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: activeWallpaperPrompt,
-          brandName: brand,
-          companyUrl,
-          apiKey,
-          jobId: currentJobId || 'global',
-        }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && data.wallpaperUri) {
-            setCinemaWallpaperUri(data.wallpaperUri);
-            playStepSuccessChime();
-          } else {
-            setWallpaperError(data.error || 'Failed to generate 32:9 cinema wallpaper');
-          }
-        })
-        .catch((err) => setWallpaperError(err.message))
-        .finally(() => setIsGeneratingWallpaper(false));
+      generateWallpaper(activeWallpaperPrompt, wallpaperAspectRatio);
     }
 
     // Step 3: Trigger Dual Branded Bugdroid Mascots (Worker + Keynote Speaker) if selected
@@ -2242,8 +2213,6 @@ export const App: React.FC = () => {
       stageStatus = '[Generating Assets]';
     } else if (isGeneratingPrompts) {
       stageStatus = '[Scripting]';
-    } else if (directorMode === 'expert') {
-      stageStatus = `Stage ${currentStage}`;
     }
 
     const fullTitle = `${prefix}${stageStatus} Executive Package`;
@@ -2252,8 +2221,6 @@ export const App: React.FC = () => {
     brandName,
     companyUrl,
     currentJobId,
-    currentStage,
-    directorMode,
     extended4kUri,
     master4kUri,
     cinemaWallpaperUri,
@@ -2358,287 +2325,60 @@ export const App: React.FC = () => {
         onOpenPromptGuide={() => setShowPromptGuideModal(true)}
         hasCustomPromptGuide={Boolean(customPromptGuide && customPromptGuide.trim().length > 0)}
         onOpenWelcomeGuide={() => setShowWelcomeGuide(true)}
-        directorMode={directorMode}
-        onDirectorModeChange={handleDirectorModeChange}
         brandName={brandName}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
-        {directorMode === 'express' ? (
-          <ExpressDirectorView
-            companyUrl={companyUrl}
-            onCompanyUrlChange={setCompanyUrl}
-            brandName={brandName}
-            onBrandNameChange={setBrandName}
-            themeContext={themeContext}
-            onThemeContextChange={setThemeContext}
-            industry={customerIndustry}
-            includeCinemaWallpaper={includeCinemaWallpaper}
-            onIncludeCinemaWallpaperChange={setIncludeCinemaWallpaper}
-            includeBugdroidMascot={includeBugdroidMascot}
-            onIncludeBugdroidMascotChange={setIncludeBugdroidMascot}
-            includeCountdownVideo={includeCountdownVideo}
-            onIncludeCountdownVideoChange={setIncludeCountdownVideo}
-            isAnalyzingBrand={isAnalyzingBrand}
-            cinemaWallpaperUri={cinemaWallpaperUri}
-            wallpaperPillars={wallpaperPillars}
-            currentPillarIndex={currentPillarIndex}
-            bugdroidMascotUri={bugdroidMascotUri}
-            bugdroidSpeakerUri={bugdroidSpeakerUri}
-            isGeneratingWallpaper={isGeneratingWallpaper}
-            isGeneratingBugdroid={isGeneratingBugdroid}
-            isGeneratingSpeakerBugdroid={isGeneratingSpeakerBugdroid}
-            wallpaperError={wallpaperError}
-            bugdroidError={bugdroidError}
-            speakerBugdroidError={speakerBugdroidError}
-            onRedoWallpaper={handleRedoWallpaper}
-            onRedoBugdroid={handleRedoBugdroid}
-            isGeneratingPrompts={isGeneratingPrompts}
-            isBatchGeneratingVideos={isBatchGeneratingVideos}
-            isExportingMaster={isExportingMaster}
-            isExportingExtendedMaster={isExportingExtendedMaster}
-            slots={slots}
-            veoQueueStatus={veoQueueStatus}
-            extended4kUri={extended4kUri}
-            master4kUri={master4kUri}
-            youtubeUrl={youtubeUrl}
-            isUploadingYouTube={isUploadingYouTube}
-            youtubeUploadError={youtubeUploadError}
-            autoUploadYouTube={autoUploadYouTube}
-            onAutoUploadYouTubeChange={handleAutoUploadYouTubeChange}
-            onStartAutopilot={handleStartExpressAutopilot}
-            onSwitchToExpert={() => handleDirectorModeChange('expert')}
-            onUploadToYouTube={() => handleUploadToYouTube()}
-            onResetProject={handleCreateNewJob}
-            onExportExtended={handleExportExtendedMaster}
-            exportError={exportError}
-          />
-        ) : (
-          <>
-            {/* Customer & Stage Breadcrumb Bar */}
-            <div className="max-w-4xl mx-auto flex items-center justify-between px-2 pt-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Customer:</span>
-                <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                  <span className="px-3 py-0.5 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-500/30 text-xs font-black">
-                    {brandName && brandName.trim() ? brandName.trim() : 'New Client Project'}
-                  </span>
-                  {currentJobId && (
-                    <span className="text-xs font-mono text-slate-400 font-normal">
-                      ({currentJobId})
-                    </span>
-                  )}
-                </span>
-              </div>
-              <span className="text-xs font-semibold text-slate-500">
-                Stage {currentStage} of 4 • {videosCompletedCount}/10 clips ready
-              </span>
-            </div>
-
-            {/* Stepper Progress Indicator */}
-            <div className="flex items-center justify-between max-w-4xl mx-auto px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
-          {[
-            { num: 1, label: '1. Visual Concepts' },
-            { num: 2, label: '2. Scene Generation' },
-            { num: 3, label: '3. Preview & Scene Tuning' },
-            { num: 4, label: '4. Final Cut Export' },
-          ].map((st, idx) => (
-            <React.Fragment key={st.num}>
-              <button
-                type="button"
-                onClick={() => {
-                  if (st.num <= currentStage || videosCompletedCount > 0) {
-                    if (st.num === 4) {
-                      handleScrollToExportStudio();
-                    } else {
-                      setCurrentStage(st.num);
-                    }
-                  }
-                }}
-                disabled={st.num > currentStage && videosCompletedCount === 0}
-                className="flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              >
-                <span
-                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono transition-all ${
-                    currentStage >= st.num
-                      ? 'bg-[#4285F4] text-white shadow-md shadow-blue-500/20'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
-                  }`}
-                >
-                  {currentStage > st.num ? '✓' : st.num}
-                </span>
-                <span
-                  className={`text-xs font-semibold ${
-                    currentStage >= st.num
-                      ? 'text-slate-900 dark:text-white'
-                      : 'text-slate-400 dark:text-slate-500'
-                  }`}
-                >
-                  {st.label}
-                </span>
-              </button>
-              {idx < 3 && (
-                <div
-                  className={`h-0.5 flex-1 mx-3 rounded transition-all ${
-                    currentStage > st.num
-                      ? 'bg-[#4285F4]'
-                      : 'bg-slate-200 dark:bg-slate-800'
-                  }`}
-                />
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-
-        {/* STAGE 1: Customer Brand & Aesthetic Settings */}
-        {currentStage === 1 && (
-          <div className="space-y-6">
-            {videosCompletedCount > 0 && (
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 flex items-center justify-between animate-fadeIn">
-                <div className="flex items-center gap-2.5">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                  <span className="text-xs font-bold text-slate-900 dark:text-white">
-                    You have {videosCompletedCount}/10 clips ready in this project.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setCurrentStage(3)}
-                  className="px-4 py-2 rounded-xl bg-[#4285F4] hover:bg-blue-600 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-md shadow-blue-500/20"
-                >
-                  <span>Go to 30s Preview (Step 4) →</span>
-                </button>
-              </div>
-            )}
-
-            <ThemeInputForm
-              onGeneratePrompts={handleGeneratePrompts}
-              isLoading={isGeneratingPrompts}
-              initialBrandName={brandName}
-              initialCompanyUrl={companyUrl}
-              onChangeCompanyUrl={setCompanyUrl}
-              initialThemeContext={themeContext}
-              initialCreatorLdap={creatorLdap}
-              onOpenStepGuide={() => handleOpenStepGuide('step-1')}
-              onOpenPromptGuide={() => setShowPromptGuideModal(true)}
-            />
-          </div>
-        )}
-
-        {/* Global Error Banner */}
-        {globalError && (
-          <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center justify-between shadow-sm animate-fadeIn">
-            <div className="flex items-center gap-2">
-              <span className="font-bold uppercase tracking-wider">Generation Notice:</span>
-              <span>{globalError}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => handleGenerateVideoForSlot(activeSequentialSlot)}
-              className="px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] transition-colors"
-            >
-              Retry
-            </button>
-          </div>
-        )}
-
-        {/* STAGE 2: Bulk Video Generation (Veo 3.1 Fast - 2 Parallel Workers with Dynamic ETA) */}
-        {currentStage === 2 && (
-          <BulkVideoProgressPanel
-            slots={slots}
-            veoQueueStatus={veoQueueStatus}
-            isBatchGenerating={isBatchGeneratingVideos}
-            onSelectSlot={handleSelectSequentialSlot}
-            onPlayVideo={setPreviewVideoUri}
-            onProceedToPreview={() => setCurrentStage(3)}
-            onRetrySlot={(idx) => handleGenerateVideoForSlot(idx, 1, selectedVideoQuality)}
-            onRetryAllFailed={() => handleGenerateAllVideos(selectedVideoQuality)}
-            onRegenerateAll={() => handleGenerateAllVideos(selectedVideoQuality, undefined, true)}
-            onOpenStepGuide={() => handleOpenStepGuide('step-2')}
-            currentJobId={currentJobId}
-            brandName={brandName}
-          />
-        )}
-
-        {/* STAGE 3: Step 4 (30s Audio/Video Timeline Preview) & Step 5 (Fix Single Clips / Master Video) */}
-        {currentStage >= 3 && (
-          <div className="space-y-8 animate-fadeIn">
-            {/* Step 4: 30-Second Video Preview over Countdown Track */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-[#4285F4] border border-blue-500/20">
-                      Step 4
-                    </span>
-                    <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                      30-Second Video Preview over Countdown Track
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenStepGuide('step-4')}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-[#4285F4] border border-blue-500/30 hover:bg-blue-500/20 transition-colors cursor-pointer ml-1"
-                      title="Open Step 4 Guide"
-                    >
-                      <HelpCircle className="w-3 h-3" />
-                      <span>Guide</span>
-                    </button>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Preview your synchronized countdown video over the 30-second countdown MP3 music and adjust scene timing.
-                  </p>
-                </div>
-              </div>
-
-              <SimplifiedAudioPreview
-                slots={slots}
-                audioTrackUri="/countdown/countdown_track.mp3"
-                masterVideoUri={masterVideoUri || master720pUri || master4kUri}
-                onProceedToMaster={handleScrollToExportStudio}
-                onSelectSlot={handleSelectSequentialSlot}
-              />
-            </div>
-
-            {/* Step 5: Fine-Tune Individual Scenes (5a) or Create Master Video (5b) */}
-            <SingleClipFixer
-              slots={slots}
-              activeSlotIndex={activeSequentialSlot}
-              onSelectSlot={handleSelectSequentialSlot}
-              onUpdateVideoPrompt={handleUpdateVideoPrompt}
-              onRecreatePrompt={handleRecreatePrompt}
-              onRedoVideo={(idx) => handleGenerateVideoForSlot(idx, 1, selectedVideoQuality)}
-              onPlayVideo={setPreviewVideoUri}
-              onProceedToMaster={handleScrollToExportStudio}
-              veoQueueStatus={veoQueueStatus}
-            />
-          </div>
-        )}
-
-        {/* Step 4: Inline Final Cut & Full Video Assembly Studio */}
-        {currentStage >= 2 && videosCompletedCount > 0 && (
-          <FinalCutExportStudio
-            slots={slots}
-            masterVideoUri={masterVideoUri}
-            master720pUri={master720pUri}
-            master4kUri={master4kUri}
-            extendedMasterVideoUri={extendedMasterVideoUri}
-            extended720pUri={extended720pUri}
-            extended4kUri={extended4kUri}
-            isExporting={isExportingMaster}
-            isExportingExtended={isExportingExtendedMaster}
-            projectRenderMetrics={projectRenderMetrics}
-            onExport={handleExportMaster}
-            onExportExtended={handleExportExtendedMaster}
-            onPlayVideo={setPreviewVideoUri}
-            onOpenStepGuide={() => handleOpenStepGuide('step-6')}
-            youtubeUrl={youtubeUrl}
-            isUploadingYouTube={isUploadingYouTube}
-            onUploadToYouTube={() => handleUploadToYouTube()}
-          />
-        )}
-          </>
-        )}
+        <ExpressDirectorView
+          companyUrl={companyUrl}
+          onCompanyUrlChange={setCompanyUrl}
+          brandName={brandName}
+          onBrandNameChange={setBrandName}
+          themeContext={themeContext}
+          onThemeContextChange={setThemeContext}
+          industry={customerIndustry}
+          includeCinemaWallpaper={includeCinemaWallpaper}
+          onIncludeCinemaWallpaperChange={setIncludeCinemaWallpaper}
+          includeBugdroidMascot={includeBugdroidMascot}
+          onIncludeBugdroidMascotChange={setIncludeBugdroidMascot}
+          includeCountdownVideo={includeCountdownVideo}
+          onIncludeCountdownVideoChange={setIncludeCountdownVideo}
+          isAnalyzingBrand={isAnalyzingBrand}
+          cinemaWallpaperUri={cinemaWallpaperUri}
+          wallpaperPillars={wallpaperPillars}
+          currentPillarIndex={currentPillarIndex}
+          wallpaperAspectRatio={wallpaperAspectRatio}
+          onWallpaperAspectRatioChange={handleAspectRatioChange}
+          bugdroidMascotUri={bugdroidMascotUri}
+          bugdroidSpeakerUri={bugdroidSpeakerUri}
+          isGeneratingWallpaper={isGeneratingWallpaper}
+          isGeneratingBugdroid={isGeneratingBugdroid}
+          isGeneratingSpeakerBugdroid={isGeneratingSpeakerBugdroid}
+          wallpaperError={wallpaperError}
+          bugdroidError={bugdroidError}
+          speakerBugdroidError={speakerBugdroidError}
+          onRedoWallpaper={handleRedoWallpaper}
+          onRedoBugdroid={handleRedoBugdroid}
+          isGeneratingPrompts={isGeneratingPrompts}
+          isBatchGeneratingVideos={isBatchGeneratingVideos}
+          isExportingMaster={isExportingMaster}
+          isExportingExtendedMaster={isExportingExtendedMaster}
+          slots={slots}
+          veoQueueStatus={veoQueueStatus}
+          extended4kUri={extended4kUri}
+          master4kUri={master4kUri}
+          youtubeUrl={youtubeUrl}
+          isUploadingYouTube={isUploadingYouTube}
+          youtubeUploadError={youtubeUploadError}
+          autoUploadYouTube={autoUploadYouTube}
+          onAutoUploadYouTubeChange={handleAutoUploadYouTubeChange}
+          onStartAutopilot={handleStartExpressAutopilot}
+          onUploadToYouTube={() => handleUploadToYouTube()}
+          onResetProject={handleCreateNewJob}
+          onExportExtended={handleExportExtendedMaster}
+          exportError={exportError}
+        />
 
         {/* Recent Master Countdowns Carousel */}
         <RecentMastersCarousel

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Key, Activity, Sun, Moon, Sparkles, ExternalLink, CheckCircle2, X, Terminal, RefreshCw, Image as ImageIcon, ShieldCheck, FolderOpen, Plus, HelpCircle, Volume2, VolumeX, Film, Play, LogOut, MoreHorizontal, FileText, Settings, Zap } from 'lucide-react';
+import { Key, Activity, Sun, Moon, Sparkles, ExternalLink, CheckCircle2, X, Terminal, RefreshCw, Image as ImageIcon, ShieldCheck, FolderOpen, Plus, HelpCircle, Volume2, VolumeX, Film, Play, LogOut, MoreHorizontal, FileText, Settings } from 'lucide-react';
 import { ImageModelType, VeoModelType, AuthMode, JobSummary } from '../types';
 import { getMediaUrl } from '../utils/media';
 import { ProjectsModal } from './ProjectsModal';
@@ -32,8 +32,6 @@ interface HeaderProps {
   onOpenPromptGuide?: () => void;
   hasCustomPromptGuide?: boolean;
   onOpenWelcomeGuide?: () => void;
-  directorMode?: 'express' | 'expert';
-  onDirectorModeChange?: (mode: 'express' | 'expert') => void;
   brandName?: string;
 }
 
@@ -65,8 +63,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenPromptGuide,
   hasCustomPromptGuide = false,
   onOpenWelcomeGuide,
-  directorMode = 'express',
-  onDirectorModeChange,
 }) => {
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showBulkDeleteInModal, setShowBulkDeleteInModal] = useState(false);
@@ -244,39 +240,6 @@ export const Header: React.FC<HeaderProps> = ({
           </p>
         </div>
       </div>
-
-      {/* Director Mode Switcher: Express vs Expert */}
-      {onDirectorModeChange && (
-        <div className="flex items-center p-1 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-inner">
-          <button
-            type="button"
-            onClick={() => onDirectorModeChange('express')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-              directorMode === 'express'
-                ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white shadow-md'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Zap className="w-3.5 h-3.5 fill-current" />
-            <span className="hidden sm:inline">Express Director</span>
-            <span className="sm:hidden">Express</span>
-            <span className="hidden sm:inline-block px-1.5 py-0.2 rounded-full text-[9px] bg-white/20 text-white font-mono">DEFAULT</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onDirectorModeChange('expert')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-              directorMode === 'expert'
-                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Film className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Expert Director</span>
-            <span className="sm:hidden">Expert</span>
-          </button>
-        </div>
-      )}
 
       <div className="flex items-center gap-2.5">
         {/* Projects Popup Button (Shift+Click triggers Maintenance Mode) */}

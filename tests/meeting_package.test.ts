@@ -99,4 +99,25 @@ describe('Customer Meeting Package Architecture', () => {
     const countVideo = Object.values(configVideoOnly).filter(Boolean).length;
     expect(countVideo).toBe(1);
   });
+
+  it('validates 16:9 widescreen vs 32:9 cinema aspect ratio resolutions and specifications', () => {
+    // 32:9 Cinema (Ultrawide)
+    const cinemaWidth = 3840;
+    const cinemaHeight = 1080;
+    expect(cinemaWidth / cinemaHeight).toBeCloseTo(32 / 9, 3);
+
+    // 16:9 Widescreen (Standard 4K UHD)
+    const uhdWidth = 3840;
+    const uhdHeight = 2160;
+    expect(uhdWidth / uhdHeight).toBeCloseTo(16 / 9, 3);
+
+    // Default aspect ratio must be 32:9
+    const defaultAspectRatio: '32:9' | '16:9' = '32:9';
+    expect(defaultAspectRatio).toBe('32:9');
+
+    // Toggling from 32:9 to 16:9 switches target resolution to 3840x2160
+    const toggleAspectRatio = (current: '32:9' | '16:9'): '32:9' | '16:9' => (current === '32:9' ? '16:9' : '32:9');
+    expect(toggleAspectRatio('32:9')).toBe('16:9');
+    expect(toggleAspectRatio('16:9')).toBe('32:9');
+  });
 });

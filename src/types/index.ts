@@ -236,6 +236,7 @@ export interface CustomerMeetingDeliverables {
   cinemaWallpaperPrompt?: string;
   wallpaperPillars?: WallpaperPillar[];
   currentPillarIndex?: number;
+  wallpaperAspectRatio?: '32:9' | '16:9';
   isGeneratingWallpaper?: boolean;
   wallpaperError?: string | null;
   bugdroidMascotUri?: string | null;
